@@ -940,6 +940,9 @@ class engineObj():
         self.HF.fG = fG
 
         allowed_qTags = [None, 'none', 'NA', 'None', 'N']
+        print("TEST1")
+        print(qFileTag)
+        print(qFilePath)
         if qFileTag in allowed_qTags:
             qFileTag = None
         if qFilePath in allowed_qTags:
@@ -1359,9 +1362,9 @@ class engineObj():
         BR = ep.BRFunc.ev(R,Z)
         BZ = ep.BZFunc.ev(R,Z)
         B = np.sqrt(BR**2 + Bt**2 + BZ**2)
-        Bmag = np.sign(ep.g['Bt0'])
+        Bsign = np.sign(ep.g['Bt0'])
         #Calculate frequencies and gyro radius
-        self.GYRO.setupFreqs(B)
+        self.GYRO.setupFreqs(B*Bsign)
         self.GYRO.setupRadius(vPerp)
         #trace helix and save to CSV and VTK formats
         self.GYRO.singleGyroTrace(vPerp,vParallel,float(gPhase),float(N_helix),BtraceXYZ,controlfilePath,
@@ -1503,6 +1506,7 @@ class engineObj():
             tools.initializeInput(self.HF, infile=self.infile)
         else:
             tools.initializeInput(self.HF, infile=infile)
+        
         return
 
     def initializeGYRO(self, infile=None):
@@ -1647,6 +1651,8 @@ class engineObj():
                                 self.newInputsFlag = False
 
                         #get the optical heat flux
+                        print("TEST")
+                        print(self.HF.qFileTag)
                         if self.HF.qFileTag is None:
                             self.HF_PFC(PFC, repeatIdx, PFC.tag)
                         else:

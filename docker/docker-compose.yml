@@ -5,11 +5,18 @@
 #             requires user to have the volumes below locally on host
 #             if not, comment out the line for the dir you don't have
 #             if so, change paths to match your machine
-version: "3"
+version: "3.3"
 
 services:
   HEAT:
-    image: "plasmapotential/heat:v3.0.1"
+    user: ${UID}:${GID}
+    build:
+      context: .
+      args:
+        HOST_USER: ${USER}
+        HOST_UID: ${UID}
+        HOST_GID: ${GID}
+    image: "plasmapotential/heat:heatuser"
     ports:
       - "8050:8050"
     volumes:
@@ -18,9 +25,9 @@ services:
       #user should not edit container paths
       #
       # HEAT data directory on this machine (if exists)
-      - ${HOME}/HEAT:/root/HEAT
-#      # HEAT source code from github
-#      - /home/tom/source/HEAT/github/source:/root/source/HEAT
+      - ${HOME}/HEAT:/home/heatuser/HEAT
+      # HEAT source code from github
+      - /home/tom/source/HEAT/github/source:/home/heatuser/source/HEAT
 #      # ORNL EFIT class from github (if you have access, else in container)
 #      - /home/tom/source/EFIT:/root/EFIT
 #      # MAFOT bins and libs
@@ -33,15 +40,18 @@ services:
 #      - /home/tom/OpenFOAM/tom-v2106/platforms/linux64GccDPInt32Opt/bin:/root/opt/swak4foam/bin
 #      - /home/tom/OpenFOAM/tom-v2106/platforms/linux64GccDPInt32Opt/lib:/root/opt/swak4foam/lib
 #      # Batch mode directory
-#      - /home/tom/HEATruns/SPARC/sweep7_T4:/root/terminal
+      - /home/tom/HEATruns/SPARC/fishScale_T5B:/home/heatuser/terminal
     stdin_open: true # docker run -i
     tty: true        # docker run -t
     #if you want to set env vars, do it here:
-    #environment:
+    environment:
     #- dockerUID=$dockerUID
     #- dockerGID=$dockerGID
     #- UID=$dockerUID
     #- GID=$dockerGID
+    - HOST_USER=heatuser
+    - HOST_UID=${HOST_UID:-1000}
+    - HOST_GID=${HOST_GID:-1000}
 
 
 

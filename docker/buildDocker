@@ -2,7 +2,7 @@
 #Engineer: T Looby
 #Date: 01/27/2022
 #Description:  prepares docker context, then creates docker container
-#              from ORNL dev machine
+#              from dev machine
 
 # remove previous build
 rm -rf dockerDir

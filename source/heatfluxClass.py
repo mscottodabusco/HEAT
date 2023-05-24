@@ -1018,6 +1018,11 @@ class heatFlux:
         qFileTag is the name of the file we to import (ie HF_optical.csv)
 
         """
+        if self.qFilePath != str:
+            print("Warning.  qFilePath is not string.  Cannot read.")
+            log.info("Warning.  qFilePath is not string.  Cannot read.")
+            return -1
+
         if self.qFilePath[-1] != '/':
             base = self.qFilePath + '/'
         else:

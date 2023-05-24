@@ -102,7 +102,7 @@ def loadEnviron():
         #default source code location (EFIT class should be here)
         EFITPath = homeDir + '/source'
 
-        ### OPENFOAM
+         ### OPENFOAM
         #default openFOAM source path v1912
         #OFbashrc = '/opt/openfoam/openfoam-OpenFOAM-v1912/etc/bashrc'
         #default openFOAM source path v2106

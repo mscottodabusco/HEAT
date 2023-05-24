@@ -966,6 +966,7 @@ class tools:
         chmod is permissions in base 10 (or if in base 8 preface with 0o)
         """
         print("Changing directory ownership recursively")
+        print("Path: "+path)
         print("GID: {:d}".format(GID))
         print("UID: {:d}".format(UID))
         for dirpath, dirnames, filenames in os.walk(path):
@@ -974,6 +975,7 @@ class tools:
             for filename in filenames:
                 os.chown(os.path.join(dirpath, filename), UID, GID)
                 os.chmod(os.path.join(dirpath, filename), chmod)
+        print("Complete.")
         return
 
     def is_number(self, s):
