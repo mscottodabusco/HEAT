@@ -27,7 +27,7 @@ services:
       # HEAT data directory on this machine (if exists)
       - ${HOME}/HEAT:/home/heatuser/HEAT
       # HEAT source code from github
-      - /home/tom/source/HEAT/github/source:/home/heatuser/source/HEAT
+#      - /home/tom/source/HEAT/github/source:/home/heatuser/source/HEAT
 #      # ORNL EFIT class from github (if you have access, else in container)
 #      - /home/tom/source/EFIT:/root/EFIT
 #      # MAFOT bins and libs
@@ -40,7 +40,7 @@ services:
 #      - /home/tom/OpenFOAM/tom-v2106/platforms/linux64GccDPInt32Opt/bin:/root/opt/swak4foam/bin
 #      - /home/tom/OpenFOAM/tom-v2106/platforms/linux64GccDPInt32Opt/lib:/root/opt/swak4foam/lib
 #      # Batch mode directory
-      - /home/tom/HEATruns/SPARC/fishScale_T5B:/home/heatuser/terminal
+#      - /home/tom/HEATruns/SPARC/fishScale_T5B:/home/heatuser/terminal
     stdin_open: true # docker run -i
     tty: true        # docker run -t
     #if you want to set env vars, do it here:
