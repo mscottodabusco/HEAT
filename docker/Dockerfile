@@ -63,6 +63,7 @@ RUN apt-get -yqq install python3
 RUN apt-get -yqq install python3-pip
 RUN apt-get -yqq install python3-pkg-resources
 RUN apt-get -yqq install python3-distutils
+RUN apt-get -yqq install python3-vtk9
 #RUN apt-get -yqq install mdsplus-python
 RUN apt-get -yqq install software-properties-common
 #freecad
@@ -84,7 +85,18 @@ RUN apt-get -yqq install libhdf5-openmpi-dev
 RUN apt-get -yqq install libnetcdf-dev
 RUN apt-get -yqq install libnetcdff-dev 
 
-RUN ln -s /usr/lib/x86_64-linux-gnu/libunwind.so /usr/lib/x86_64-linux-gnu/libunwind.so.1
+#for amd64
+#RUN ln -s /usr/lib/x86_64-linux-gnu/libunwind.so /usr/lib/x86_64-linux-gnu/libunwind.so.1
+
+#for multi-platform
+ARG TARGETPLATFORM
+
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+        ln -s /usr/lib/x86_64-linux-gnu/libunwind.so /usr/lib/x86_64-linux-gnu/libunwind.so.1; \
+    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+        ln -s /usr/lib/aarch64-linux-gnu/libunwind.so /usr/lib/aarch64-linux-gnu/libunwind.so.1; \
+    fi
+
 
 RUN apt-get -yqq upgrade
 

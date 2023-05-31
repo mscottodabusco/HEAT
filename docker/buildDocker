@@ -80,7 +80,11 @@ cp runDockerCompose /home/tom/source/HEAT/github/docker/
 echo "Building docker image..."
 cd dockerDir
 
-docker build -t plasmapotential/heat .
+#build for linux
+#docker build -t plasmapotential/heat .
+
+#cross platform build (for apple silicon)
+docker buildx build --platform linux/amd64,linux/arm64 -t plasmapotential/heat -f ./Dockerfile . --push
 
 #after creating image, tag it using the following command
 # docker tag plasmapotential/heat:latest plasmapotential/heat:<tag>

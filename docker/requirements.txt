@@ -17,7 +17,6 @@ pandas
 pillow
 matplotlib
 tk
-vtk
 h5py
 netCDF4
 mpi4py
