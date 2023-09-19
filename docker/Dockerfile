@@ -49,6 +49,7 @@ RUN apt-get -yqq install python3-pkg-resources
 RUN apt-get -yqq install python3-distutils
 #RUN apt-get -yqq install mdsplus-python
 #RUN apt-get -yqq install libfreecad-python3-0.19
+#RUN apt-get -yqq install libfreecad-python3-0.20
 RUN apt-get -yqq install software-properties-common
 RUN add-apt-repository ppa:freecad-maintainers/freecad-daily
 RUN apt-get update
@@ -60,6 +61,10 @@ RUN apt-get -yqq install nano
 RUN apt-get -yqq install git
 RUN apt-get -yqq install gfortran
 RUN apt-get -yqq install libunwind-dev
+RUN apt-get -yqq install libopenmpi-dev
+RUN apt-get -yqq install iputils-ping
+RUN apt-get -yqq install iproute2
+
 RUN ln -s /usr/lib/x86_64-linux-gnu/libunwind.so /usr/lib/x86_64-linux-gnu/libunwind.so.1
 
 # copy context
