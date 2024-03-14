@@ -2490,41 +2490,51 @@ class engineObj():
             print('\n----Solving for 3D plasmas with MAFOT----')
             log.info('\n----Solving for 3D plasmas with MAFOT----')
             use = np.where(PFC.shadowed_mask == 0)[0]
-            #self.plasma3D.updatePointsFromCenters(PFC.centers[use])
-            self.plasma3D.updatePointsFromVertices(PFC.vertices['x'][use,:], PFC.vertices['y'][use,:], PFC.vertices['z'][use,:], PFC.centers[use])
-            if self.plasma3D.loadHF:
-                f = self.plasma3D.loadBasePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name
-                self.plasma3D.copyAndRead(path = f, tag = 'opticalHF')
-            else: 
-                self.plasma3D.launchLaminar(self.NCPUs, tag = 'opticalHF')   # use MapDirection = 0. If problem, then we need to split here into fwd and bwd direction separately
-                self.plasma3D.cleanUp(tag = 'opticalHF')      # removes the MAFOT log files
+            if use.size !=0:
+                #self.plasma3D.updatePointsFromCenters(PFC.centers[use])
+                self.plasma3D.updatePointsFromVertices(PFC.vertices['x'][use,:], PFC.vertices['y'][use,:], PFC.vertices['z'][use,:], PFC.centers[use])
+                if self.plasma3D.loadHF:
+                    f = self.plasma3D.loadBasePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name
+                    self.plasma3D.copyAndRead(path = f, tag = 'opticalHF')
+                else: 
+                    self.plasma3D.launchLaminar(self.NCPUs, tag = 'opticalHF')   # use MapDirection = 0. If problem, then we need to split here into fwd and bwd direction separately
+                    self.plasma3D.cleanUp(tag = 'opticalHF')      # removes the MAFOT log files
             
-            # check for invalid points (psimin = 10) and remove; there should be none, but just in case
-            invalid = self.plasma3D.checkValidOutput()    # this does NOT change self.plasma3D.psimin
-            PFC.shadowed_mask[use[invalid]] = 1
-            use = np.where(PFC.shadowed_mask == 0)[0]
-            if (len(PFC.centers[use]) != len(self.plasma3D.psimin[~invalid])): 
-                raise ValueError('psimin array does not match PFC centers. Abort!')
+                # check for invalid points (psimin = 10) and remove; there should be none, but just in case
+                invalid = self.plasma3D.checkValidOutput()    # this does NOT change self.plasma3D.psimin
+                PFC.shadowed_mask[use[invalid]] = 1
+                use = np.where(PFC.shadowed_mask == 0)[0]
+                if (len(PFC.centers[use]) != len(self.plasma3D.psimin[~invalid])): 
+                    raise ValueError('psimin array does not match PFC centers. Abort!')
             
-            # define and update psimin and Lc in PFC class
-            PFC.psimin = np.zeros(PFC.centers[:,0].shape)
-            PFC.Lc = np.zeros(PFC.centers[:,0].shape)
-            PFC.psimin[use] = self.plasma3D.psimin[~invalid]
-            PFC.Lc[use] = self.plasma3D.Lc[~invalid]
+                # define and update psimin and Lc in PFC class
+                PFC.psimin = np.zeros(PFC.centers[:,0].shape)
+                PFC.Lc = np.zeros(PFC.centers[:,0].shape)
+                PFC.psimin[use] = self.plasma3D.psimin[~invalid]
+                PFC.Lc[use] = self.plasma3D.Lc[~invalid]
             
-            print('\n' + '-'*80)
-            print('\n----Calculating 3D Heat Flux Profile----')
-            log.info('\n----Calculating 3D Heat Flux Profile----')
-            self.hf3D.updateLaminarData(PFC.psimin[use],PFC.Lc[use])
-            PFC.powerFrac = self.HF.getDivertorPowerFraction(PFC.DivCode)
-            self.hf3D.heatflux(PFC.DivCode, PFC.powerFrac)                # heat flux is scaled by power fraction here
-            print("PFC "+PFC.name+" has {:.2f}% of the total power".format(PFC.powerFrac*100.0))
-            log.info("PFC "+PFC.name+" has {:.2f}% of the total power".format(PFC.powerFrac*100.0))
+                print('\n' + '-'*80)
+                print('\n----Calculating 3D Heat Flux Profile----')
+                log.info('\n----Calculating 3D Heat Flux Profile----')
+                self.hf3D.updateLaminarData(PFC.psimin[use],PFC.Lc[use])
+                PFC.powerFrac = self.HF.getDivertorPowerFraction(PFC.DivCode)
+                self.hf3D.heatflux(PFC.DivCode, PFC.powerFrac)                # heat flux is scaled by power fraction here
+                print("PFC "+PFC.name+" has {:.2f}% of the total power".format(PFC.powerFrac*100.0))
+                log.info("PFC "+PFC.name+" has {:.2f}% of the total power".format(PFC.powerFrac*100.0))
 
-            q = np.zeros(PFC.centers[:,0].shape)
-            q[use] = self.hf3D.q                                          # this is the parallel heat flux q||
-            qDiv = np.zeros(PFC.centers[:,0].shape)
-            qDiv[use] = q[use] * np.abs(PFC.bdotn[use]) * self.HF.elecFrac        # this is the incident heat flux
+                q = np.zeros(PFC.centers[:,0].shape)
+                q[use] = self.hf3D.q                                          # this is the parallel heat flux q||
+                qDiv = np.zeros(PFC.centers[:,0].shape)
+                qDiv[use] = q[use] * np.abs(PFC.bdotn[use]) * self.HF.elecFrac        # this is the incident heat flux
+            else:
+                print('\n' + '-'*80)
+                print('\n----All faces are shadowed, no MAFOT tracing----')
+                log.info('\n---All faces are shadowed, no MAFOT tracing----')
+                print('\n----3D Heat Flux Profile is 0----')
+                log.info('\n----3D Heat Flux Profile is 0----')
+                PFC.powerFrac = self.HF.getDivertorPowerFraction(PFC.DivCode)
+                q = np.zeros(PFC.centers[:,0].shape)
+                qDiv = np.zeros(PFC.centers[:,0].shape)
 
         #get psi from gfile for 2D plasmas
         else:
