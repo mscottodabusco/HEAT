@@ -847,9 +847,193 @@ class heatflux3D:
 		
 		q = 2.0/7.0 * kappa/L * (T**3.5 - T0**3.5) * (1e+3)**3.5/1e+6   # in MW/m^2
 		return q
+
+	def scale_conduct(self, kappa, ratio, P, DivCode, verfyScaling = True):
+		"""
+		scales HF using a part of the limiter outline in the g-file 
+		q-profile is obtained using laminar and apply the heat conductive model to psimin
+		Get scale factor q||0 (q0) for heat flux via power balance:
+		(input MW = output MW)
+		Finds strike point on surface and sets a dense grid around it
+		Integrates q_perp along surface and assumes axisymmetry.
+		q||0 = P_div / ( 2*pi integral(R(s) * q_perp * ds))
+		return q0
+		"""
+		# Parameter
+		srange = 0.3
+		ds = 0.0001
+		Nphi = 36
 		
+		# strike lines
+		d = self.ep.strikeLines()
+		if d is None: 		
+			# this means inner wall limited
+			s0 = 0	# inner wall at Z = Zaxis 						!!!!!!! this needs to be computed properly !!!!!!!!!
+			swall = np.arange(s0-srange, s0+srange, ds)
+		else:				
+			# find strike point for DivCode (this is to double check and prevent missmatches)
+			if 'Rin2' in d: N = 4
+			else: N = 2
+			Rstr = np.zeros(N)
+			Zstr = np.zeros(N)
+			Sstr = np.zeros(N)
+			keys = ['in','out','in2','out2']
+			for i in range(N):
+				Rstr[i] = d['R' + keys[i]]
+				Zstr[i] = d['Z' + keys[i]]
+				Sstr[i] = d['swall' + keys[i]]
 		
-	def scale_conduct(self, P, kappa, L, ratio, T0 = 0):
+			if 'L' in DivCode:					# Lower divertor, always 2 strike points
+				Rtmp = Rstr[Zstr < 0]
+				Ztmp = Zstr[Zstr < 0]
+				Stmp = Sstr[Zstr < 0]
+			elif 'U' in DivCode:				# Upper divertor
+				Rtmp = Rstr[Zstr > 0]
+				Ztmp = Zstr[Zstr > 0]
+				Stmp = Sstr[Zstr > 0]
+		
+			if len(Rtmp) < 2: 
+				raise RuntimeError('No strike points found for divertor ' + DivCode)
+	
+			# s0 is the strike point and s1 is the "other" strike point we don't want
+			if 'I' in DivCode:
+				if Rtmp[0] < Rtmp[1]: s0,s1 = Stmp[0],Stmp[1]
+				else: s0,s1 = Stmp[1],Stmp[0]
+			elif 'O' in DivCode:
+				if Rtmp[0] < Rtmp[1]: s0,s1 = Stmp[1],Stmp[0]
+				else: s0,s1 = Stmp[0],Stmp[1]
+
+			# set swall range
+			if s0 < s1:		# swall goes ccw for inner and cw for outer
+				dpfr = s1 - s0
+				swall = np.arange(s0 - srange, s0 + 0.4*dpfr, ds)
+			else:
+				dpfr = s0 - s1
+				swall = np.arange(s0 - 0.4*dpfr, s0 + srange, ds)
+
+		# get R,Z and write points file
+		R,Z,nR,nZ = self.ep.all_points_along_wall(swall, get_normal = True)
+
+		# Use MAFOT to get psimin
+		runLaminar = True
+		tag = DivCode
+		file = self.cwd + '/../' + 'lam_' + tag + '.dat'
+		if os.path.isfile(file): runLaminar = False		# MAFOT data already available
+
+		if runLaminar:
+			# write points file
+			with open(self.cwd + '/' + 'points_' + tag + '.dat','w') as f:
+				for j in range(Nphi):
+					phi = j*(360.0/Nphi)
+					for i in range(len(R)):
+						f.write(str(R[i]) + '\t' + str(phi) + '\t' + str(Z[i]) + '\n')
+			
+			# set bounding box
+			bbRmin = min([R.min()-0.1, self.ep.g['wall'][:,0].min()-0.1])
+			bbRmax = max([R.max()+0.1, self.ep.g['wall'][:,0].max()+0.1])
+			bbZmin = min([Z.min()-0.1, self.ep.g['wall'][:,1].min()-0.1])
+			bbZmax = max([Z.max()+0.1, self.ep.g['wall'][:,1].max()+0.1])
+			bbLimits = str(bbRmin) + ',' + str(bbRmax) + ',' + str(bbZmin) + ',' + str(bbZmax)
+			
+			# call MAFOT
+			args = ['mpirun','-n',str(self.NCPUs),'heatlaminar_mpi','-P','points_' + tag + '.dat','-B',bbLimits,'_lamCTL.dat',tag]
+			current_env = os.environ.copy()        #Copy the current environment (important when in appImage mode)
+			subprocess.run(args, env=current_env, cwd=self.cwd)
+			for f in glob.glob(self.cwd + '/' + 'log*'): os.remove(f)		#cleanup
+			
+			# move one folder down
+			src = self.cwd + '/' + 'lam_' + tag + '.dat'
+			dst = self.cwd + '/../' + 'lam_' + tag + '.dat'
+			if os.path.isfile(src): 
+				shutil.move(src, dst)
+		
+		# Read MAFOT data
+		if os.path.isfile(file): 
+			lamdata = np.genfromtxt(file,comments='#')
+			Lc = lamdata[:,3]
+			psimin = lamdata[:,4]
+			Lcpsimin = lamdata[:,7]
+			#BR = lamdata[:,6]
+			#BZ = lamdata[:,7]
+			#Bt = lamdata[:,8]
+		else:
+			print('File', file, 'not found') 
+			log.info('File ' + file + ' not found') 
+
+		# Find PFR
+		mask = np.zeros(len(psimin), dtype = bool)
+		pfr = np.where((psimin < 1) & (Lc < self.Lcmin))
+		mask[pfr] = True
+
+		# get parallel heat flux
+		L = np.mean(Lc[psimin > self.lcfs])*1e3	   # 3D average connection length in open field line area in m
+		#L = Lcpsimin*1e3	# connection length at psi = psimin in m
+		qpar = self.getq_conduct(psimin, kappa = kappa, L = L, pfr = pfr, ratio = ratio)
+		qpar = qpar.reshape(Nphi,len(R))
+
+		# filter for outliers
+		threshold = qpar.max(1).mean() + qpar.max(1).std()	# get max at each angle. outliers are > than average maximum + one standard deviation of all maxima
+		idx = np.where(qpar > threshold)
+
+		if verfyScaling:
+			with open(self.cwd + '/../' + 'qpar_' + tag + '.dat','w') as f:
+				f.write('# Parallel heat flux along g-file limiter for this divertor at multiple toroidal angles\n')
+				f.write('# The field line tracing is in file: ' + file + '\n')			
+				f.write('# Nphi = ' + str(Nphi) + '\n')
+				f.write('# kappa = ' + str(kappa) + '\n')
+				f.write('# lq/S = ' + str(ratio) + '\n')
+				f.write('# lcfs = ' + str(self.lcfs) + '\n')
+				f.write('# Lcond = ' + str(L) + '\n')
+				f.write('# Lcmin = ' + str(self.Lcmin) + '\n')
+				f.write('# Number of outliers = ' + str(len(idx[0])) + '\n')
+				f.write('# Filter threshold = ' + str(threshold) + '  Use: idx = np.where(qpar > threshold)' + '\n')
+				try: f.write('# Average outlier value = ' + str(qpar[idx].mean()) + '\n')
+				except: f.write('# Average outlier value = None\n')
+				f.write('# Each column of qpar is at another angle with phi[i] = i * 2pi/Nphi\n')
+				f.write('#\n')
+				f.write('# R[m]  Z[m]  swall[m]  qpar[phi,swall]\n')
+				f.write('#\n')
+				for i in range(len(R)):
+					f.write(str(R[i]) + '\t' + str(Z[i]) + '\t' + str(swall[i]))
+					for j in range(Nphi):
+						f.write('\t' + str(qpar[j,i]))
+					f.write('\n')
+
+		if len(idx[0]) > 0:
+			print('Filtering outliers: number = ' + str(len(idx[0])) + ', threshold = ' + str(threshold) + ', <outlier value> = ' + str(qpar[idx].mean()))
+			log.info('Filtering outliers: number = ' + str(len(idx[0])) + ', threshold = ' + str(threshold) + ', <outlier value> = ' + str(qpar[idx].mean()))
+			qpar[idx] = 0
+		else:
+			print('Filtering outliers: None found')
+			log.info('Filtering outliers: None found')
+			
+		# average over the toroidal angles
+		qparm = qpar.mean(0)
+
+		# get incident angle
+		BR = self.ep.BRFunc.ev(R,Z)
+		Bt = self.ep.BtFunc.ev(R,Z)
+		BZ = self.ep.BZFunc.ev(R,Z)
+		
+		#BR = BR.reshape(Nphi,len(R)); BR = BR.mean(0)
+		#BZ = BZ.reshape(Nphi,len(R)); BZ = BZ.mean(0)
+		#Bt = Bt.reshape(Nphi,len(R)); Bt = Bt.mean(0)
+
+		B = np.sqrt(BR**2 + Bt**2 + BZ**2)
+		nB = np.abs(nR*BR + nZ*BZ)/B
+		
+		# perpendicular heat flux
+		q = qparm*nB
+		
+		# Integrate along line and along toroidal angle (axisymm) to get total power
+		P0 = 2*np.pi * integ.simps(R*q, swall)
+		#account for nonphysical power
+		if P0 < 0: P0 = -P0
+		#Scale to input power
+		q0 = P/P0
+		return q0	#, q,mask,nB,qp	
+		
+	def scale_conduct1(self, P, kappa, L, ratio, T0 = 0):
 		"""
 		Get scale factor q||0 (q0) for heat flux via power balance:
 		(input MW = output MW)
