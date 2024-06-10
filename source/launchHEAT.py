@@ -83,7 +83,7 @@ def loadEnviron():
 
         ### USER ROOT HEATDIR
         #Root HEAT source code directory
-        rootDir = homeDir + '/source/HEAT/source'
+        rootDir = homeDir + '/source/HEAT/'
         #default AppDir for when running in docker mode
         AppDir = os.environ["APPDIR"]
 

@@ -106,6 +106,15 @@ class heatFlux:
         :qBG: Background heat flux applied to all surfaces when using an Eich profile [MW/m^2].
           Note that this also applies flux on the backs of tiles.
         :fG: Greenwald density fraction [5] to be used when using Makowski S scaling.
+        :maskFilePath: Path to a HEAT results directory (ie /path/to/HEAT/data/nstx_000001)
+          that contains a tree (timestep and PFC directories) with heat flux data in them.  
+          HEAT will use this tree and read the .csv files to upload the shadow mask.
+          This is for when a user wants to recycle the shadow mask of a previous HEAT run without 
+          re-running the intersection check.  Set to None when no file should be read.
+        :maskFileTag: When reading shadow mask fata from a file in maskFilePath, defines the tag
+          that should be used for the shadow mask files.  For example, to read the shadow mask from 
+          a previous HEAT runs, tag would be shadowMask and HEAT would read files
+          named shadowmask.csv.  Set to None when no file should be read.
         :qFilePath: Path to a HEAT results directory (ie /path/to/HEAT/data/nstx_000001)
           that contains a tree (timestep and PFC directories) with heat flux data in them.  
           HEAT will use this tree and read the .csv files to generate a heat flux profile.
@@ -143,6 +152,8 @@ class heatFlux:
                             'radFrac',
                             'qBG',
                             'fG',
+                            'maskFilePath',
+                            'maskFileTag',
                             'qFilePath',
                             'qFileTag',
                             ]

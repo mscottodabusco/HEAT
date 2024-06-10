@@ -50,6 +50,7 @@ class plasma3D:
 		# Default inputs
 		self.plasma3Dmask = False
 		self.NCPUs = 10
+		self.frequency = 0
 		self.loadHF = False
 		self.loadBasePath = None
 		
@@ -88,7 +89,7 @@ class plasma3D:
 		"""
 		self.allowed_vars = ['plasma3Dmask','itt','response',
 				'selectField','useIcoil','sigma','charge','Ekin','Lambda','Mass','loadHF',
-				'loadBasePath','NCPUs']
+				'loadBasePath','NCPUs','frequency']
 	
 	
 	def setTypes(self):
@@ -96,7 +97,7 @@ class plasma3D:
 		Set variable types for the stuff that isnt a string from the input file
 		"""
 		integers = ['itt','response','selectField','useIcoil','sigma','charge','Mass','NCPUs']
-		floats = ['Ekin','Lambda']
+		floats = ['Ekin','Lambda','frequency']
 		bools = ['plasma3Dmask','loadHF']
 		setAllTypes(self, integers, floats, bools)     # this is not a typo, but the correct syntax for this call
 
@@ -109,7 +110,7 @@ class plasma3D:
 		self.shotFmt = "{:0"+"{:d}".format(shotSigFigs)+"d}"
 		
 		
-	def initializePlasma3D(self, shot, time, gFile = None, inputDir = None):
+	def initializePlasma3D(self, shot, time, timesteps, gFile = None, inputDir = None):
 		"""
 		Set up basic input vars
 		gfile should include the full path and file name
@@ -121,6 +122,7 @@ class plasma3D:
 		"""
 		self.shot = tools.makeInt(shot)
 		self.time = tools.makeInt(time)
+		self.timesteps = timesteps
 		if inputDir is None: inputDir = os.getcwd()
 		self.inputDir = inputDir
 		if gFile is None: gFile = self.inputDir + '/g' + format(int(self.shot),'06d') + '.' + format(int(self.time),'05d')
@@ -161,10 +163,14 @@ class plasma3D:
 		print('#=============================================================')
 		print('response = ' + str(self.response))
 		print('selectField = ' + str(self.selectField))
+		print('rotation frequency = ' +  str(self.frequency))
 		for i in range(len(self.C1Files)):
 			print('File ' + str(i+1) + ' = ' + self.C1Files[i])
 			print('   Scale = ' + str(self.C1scales[i]))
-			print('   Phase = ' + str(self.C1phases[i]))
+			if self.C1phases[i] < 360: # Trick on MAFOT rad-degree conversion
+				print('   Phase = ' + str(self.C1phases[i]))
+			else:
+				print('   Phase = ' + str(self.C1phases[i]-360))
 
 		log.info('#=============================================================')
 		log.info('#                Equilibrium Variables')
@@ -195,10 +201,14 @@ class plasma3D:
 		log.info('#=============================================================')
 		log.info('response = ' + str(self.response))
 		log.info('selectField = ' + str(self.selectField))
+		log.info('rotation frequency = ' +  str(self.frequency))
 		for i in range(len(self.C1Files)):
 			log.info('File ' + str(i+1) + ' = ' + self.C1Files[i])
 			log.info('   Scale = ' + str(self.C1scales[i]))
-			log.info('   Phase = ' + str(self.C1phases[i]))
+			if self.C1phases[i] < 360: # Trick on MAFOT rad-degree conversion
+				print('   Phase = ' + str(self.C1phases[i]))
+			else:
+				print('   Phase = ' + str(self.C1phases[i]-360))
 
 
 	def updatePFCdata(self, cwd):
@@ -226,7 +236,45 @@ class plasma3D:
 		if phases is None: self.C1phases = np.zeros(len(C1Files))
 		else: self.C1phases = phases
 	
-	
+	def editM3DC1supFile(self, frequency):
+		""""
+		Edit the M3D-C1 supplemental input file if the perturbation rotate 
+		The m3dc1sup.in initial file is copied in m3dc1supref.in
+		"""
+
+		C1Files = []
+		scales = []
+		phases = []
+
+		if not os.path.isfile(self.inputDir + '/' + 'm3dc1supref.in'): 
+			src = self.inputDir + '/' + 'm3dc1sup.in'
+			dst = self.inputDir + '/' + 'm3dc1supref.in' 
+			shutil.copy(src, dst)
+
+		with open(self.inputDir + '/' + 'm3dc1supref.in') as f:
+				lines = f.readlines()
+		
+		for line in lines:
+			line = line.strip()
+			if len(line) < 1: continue
+			if line[0] == '#': continue
+			words = line.split()
+			c1file = words[0]
+			# if ('./' in c1file): c1file = c1file.replace('./', self.inputDir + '/')
+			C1Files.append(c1file)
+			scales.append(tools.makeFloat(words[1]))
+			if len(words) > 2: phases.append(tools.makeFloat(words[2]))
+			else: phases.append(0)
+
+		phases = [x+360*frequency*self.time*1e-3 for x in phases]
+			
+		with open(self.inputDir + '/' + 'm3dc1sup.in','w') as f:
+			for i in range(len(C1Files)):
+				if phases[i] < np.pi: #Trick MAFOT for rad-degree internal conversion 
+					phases[i] += 360 
+				f.write(str(C1Files[i]) + "\t" + str(scales[i]) + "\t" + str(phases[i]) + "\n")
+
+
 	def readM3DC1supFile(self):
 		"""
 		Read M3D-C1 supplemental input file, if it already exists
@@ -240,21 +288,24 @@ class plasma3D:
 			log.info('m3dc1sup.in file not found!')
 			self.setM3DC1input()
 			return
-		
+
+		if self.frequency != 0.:
+			self.editM3DC1supFile(self.frequency)
+
 		with open(self.inputDir + '/' + 'm3dc1sup.in') as f:
 			lines = f.readlines()
 		
-		for line in lines:
-			line = line.strip()
-			if len(line) < 1: continue
-			if line[0] == '#': continue
-			words = line.split()
-			c1file = words[0]
-			if ('./' in c1file): c1file = c1file.replace('./', self.inputDir + '/')
-			C1Files.append(c1file)
-			scales.append(tools.makeFloat(words[1]))
-			if len(words) > 2: phases.append(tools.makeFloat(words[2]))
-			else: phases.append(0)
+			for line in lines:
+				line = line.strip()
+				if len(line) < 1: continue
+				if line[0] == '#': continue
+				words = line.split()
+				c1file = words[0]
+				if ('./' in c1file): c1file = c1file.replace('./', self.inputDir + '/')
+				C1Files.append(c1file)
+				scales.append(tools.makeFloat(words[1]))
+				if len(words) > 2: phases.append(tools.makeFloat(words[2]))
+				else: phases.append(0)
 		
 		if len(C1Files) < 1: 
 			print('Error reading m3dc1sup.in')

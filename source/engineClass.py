@@ -1010,7 +1010,7 @@ class engineObj():
                     fracCN,fracCF,fracPN,fracPF,
                     fracUI,fracUO,fracLI,fracLO,
                     lqCNmode,lqCFmode,lqPNmode,lqPFmode,SMode,
-                    qBG,P,radFrac,fG,
+                    qBG,P,radFrac,fG,maskFilePath,maskFileTag,
                     qFilePath,qFileTag,tIdx=0):
         """
         get heat flux inputs from gui or input file
@@ -1038,6 +1038,14 @@ class engineObj():
         self.HF.lqPFmode = lqPFmode
         self.HF.SMode = SMode
         self.HF.fG = fG
+
+        allowed_maskTags = [None, 'none', 'NA', 'None', 'N']
+        if maskFileTag in allowed_maskTags:
+            maskFileTag = None
+        if maskFilePath in allowed_maskTags:
+            maskFilePath = None
+        self.HF.maskFilePath = maskFilePath
+        self.HF.maskFileTag = maskFileTag
 
         allowed_qTags = [None, 'none', 'NA', 'None', 'N']
         if qFileTag in allowed_qTags:
@@ -1181,6 +1189,8 @@ class engineObj():
                          self.HF.P,
                          self.HF.radFrac,
                          self.HF.fG,
+                         self.HF.maskFilePath,
+                         self.HF.maskFileTag,
                          self.HF.qFilePath,
                          self.HF.qFileTag,
                          tIdx)
@@ -1727,7 +1737,7 @@ class engineObj():
             # 3Dplasma general setup
             if self.plasma3D.plasma3Dmask:
                 gFile = self.MHD.shotPath + self.tsFmt.format(t) + '/' + self.MHD.gFiles[tIdx]
-                self.plasma3D.initializePlasma3D(self.MHD.shot, t, gFile, self.MHD.tmpDir[0:-1])   # remove / at the end of paths   Also: this no longer reads the input file. This is now done by self.loadInputs
+                self.plasma3D.initializePlasma3D(self.MHD.shot, t, self.MHD.timesteps, gFile, self.MHD.tmpDir[0:-1])   # remove / at the end of paths   Also: this no longer reads the input file. This is now done by self.loadInputs
                 self.plasma3D.setBoundaryBox(self.MHD, self.CAD)
                 self.hf3D.initializeHF3D(self.MHD.tmpDir[0:-1])     # this no longer reads the input file. This is now done by self.loadInputs
                 self.plasma3D.print_settings()
@@ -2017,6 +2027,13 @@ class engineObj():
             #paraview postprocessing (movies)
             if self.IO.csvMask == True:
                 self.combineTimeSteps(runList, t)
+
+        # Reset M3D-C1 suppplemental file if the perturbation rotates
+        if self.plasma3D.frequency != 0.:
+            src = self.plasma3D.inputDir + '/' + 'm3dc1supref.in'
+            dst = self.plasma3D.inputDir + '/' + 'm3dc1sup.in'
+            shutil.copy(src, dst)
+            os.remove(self.plasma3D.inputDir + '/' + 'm3dc1supref.in')
 
         #copy HEAT logfile to shotpath
         #shutil.copyfile(self.logFile, self.MHD.shotPath+'HEATlog.txt')			#AW: this is a strange place for this command, runHEAT is not complete yet. The same call is already in terminalUI, just after runHEAT is complete
@@ -2464,9 +2481,15 @@ class engineObj():
         #Check for intersections with MAFOT struct
         t0 = time.time()
         val = -1
+        
+        if self.HF.maskFileTag:
+            f = self.HF.maskFilePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name + '/' + self.HF.maskFileTag
+            val = plasma3DClass.readShadowFile(f, PFC)
+        # ----- Not necessary now and to be integrated with mask and q flags ----- 
         if self.plasma3D.loadHF:
             f = self.plasma3D.loadBasePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name + '/shadowMask.csv'
             val = plasma3DClass.readShadowFile(f, PFC)
+        # ------------------------------------------------------------------------
         if val == -1:
             #check if this is a repeated MHD EQ
             #and that the inputs have not changed
@@ -3223,6 +3246,9 @@ class engineObj():
         #first try to make new directory
         tools.makeDir(movieDir, clobberFlag=False, mode=self.chmod, UID=self.UID, GID=self.GID)
         tStr = self.tsFmt.format(t)
+        # Temporary modification to set up right output spelling for paraview movies
+        tsFmt = '{:06d}'
+        tStr = tsFmt.format(t)
         if 'hfOpt' in runList:
             src = tPath + 'HF_optical_all.csv'
             dest = movieDir + 'hfOptical_'+tStr+'.csv'
@@ -3363,6 +3389,8 @@ class engineObj():
                     'radFrac' : None,
                     'qBG' : None,
                     'fG' : None,
+                    'maskFilePath' : None,
+                    'maskFileTag' : None,
                     'qFilePath' : None,
                     'qFileTag' : None,
                     'N_gyroSteps': None,
@@ -3410,6 +3438,7 @@ class engineObj():
                     'loadHF':None,
                     'loadBasePath':None,
                     'NCPUs':None,
+                    'frequency':None,
                     'Lcmin':None,
                     'lcfs':None,
                     'teProfileData':None,
@@ -3470,6 +3499,8 @@ class engineObj():
                     'fracLO':self.HF.fracLO,
                     'qBG' : self.HF.qBG,
                     'fG' : self.HF.fG,
+                    'maskFilePath' : self.HF.maskFilePath,
+                    'maskFileTag' : self.HF.maskFileTag,
                     'qFilePath': self.HF.qFilePath,
                     'qFileTag': self.HF.qFileTag,
                     'OFtMin': self.OF.OFtMin,
@@ -3507,6 +3538,7 @@ class engineObj():
                     'loadHF':self.plasma3D.loadHF,
                     'loadBasePath':self.plasma3D.loadBasePath,
                     'NCPUs':self.plasma3D.NCPUs,
+                    'frequency':self.plasma3D.frequency,
                     'Lcmin':self.hf3D.Lcmin,
                     'lcfs':self.hf3D.lcfs, 
                     'teProfileData':self.hf3D.teProfileData,
@@ -3554,6 +3586,8 @@ class engineObj():
                     'fracLO':self.HF.fracLO,
                     'qBG' : self.HF.qBG,
                     'fG' : self.HF.fG,
+                    'maskFilePath' : self.HF.maskFilePath,
+                    'maskFileTag' : self.HF.maskFileTag,
                     'qFilePath': self.HF.qFilePath,
                     'qFileTag': self.HF.qFileTag,
                     'OFtMin': self.OF.OFtMin,
@@ -3591,6 +3625,7 @@ class engineObj():
                     'loadHF':self.plasma3D.loadHF,
                     'loadBasePath':self.plasma3D.loadBasePath,
                     'NCPUs':self.plasma3D.NCPUs,
+                    'frequency':self.plasma3D.frequency,
                     'Lcmin':self.hf3D.Lcmin,
                     'lcfs':self.hf3D.lcfs, 
                     'teProfileData':self.hf3D.teProfileData,
@@ -4036,18 +4071,19 @@ class engineObj():
 
 
                 # determine heat flux boundary condition
-                if (t in PFC.timesteps) and (t in self.MHD.timesteps):
+                if (t*1.e3 in PFC.timesteps) and (t*1.e3 in self.MHD.timesteps):
                     #we explicitly calculated HF for this timestep
-                    print("OF.timestep: {:f} in PFC.timesteps".format(t))
-                    log.info("OF.timestep: {:f} in PFC.timesteps".format(t))
-                    HFcsv = self.MHD.shotPath + self.tsFmt.format(t) + '/' + PFC.name + '/HF_allSources.csv'
+                    print("OF.timestep: {:f} in PFC.timesteps".format(t*1.e3))
+                    log.info("OF.timestep: {:f} in PFC.timesteps".format(t*1.e3))
+                    HFcsv = self.MHD.shotPath + self.tsFmt.format(t*1.e3) + '/' + PFC.name + '/HF_allSources.csv'
+                    print('HFcsv = ', HFcsv)
                     qDiv = pd.read_csv(HFcsv)['$MW/m^2$'].values #this is the HF column header in the CSV file
                     #OFcenters = pd.read_csv(HFcsv).iloc[:,0:3].values
                     #write boundary condition
                     print("Maximum qDiv for this PFC and time: {:f}".format(qDiv.max()))
                     log.info("Maximum qDiv for this PFC and time: {:f}".format(qDiv.max()))
                     self.HF.write_openFOAM_boundary(OFcenters,qDiv,partDir,t)
-                elif (t < self.MHD.timesteps.min()) or (t > self.MHD.timesteps.max()):
+                elif (t*1.e3 < self.MHD.timesteps.min()) or (t*1.e3 > self.MHD.timesteps.max()):
                     #apply zero HF outside of discharge domain (ie tiles cooling)
                     print("OF.timestep: {:f} outside MHD domain".format(t))
                     log.info("OF.timestep: {:f} outside MHD domain".format(t))
