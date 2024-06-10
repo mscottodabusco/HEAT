@@ -3248,7 +3248,7 @@ class engineObj():
         tStr = self.tsFmt.format(t)
         # Temporary modification to set up right output spelling for paraview movies
         tsFmt = '{:06d}'
-        tStr = tsFmt.format(t)
+        tStr = tsFmt.format(int(t))
         if 'hfOpt' in runList:
             src = tPath + 'HF_optical_all.csv'
             dest = movieDir + 'hfOptical_'+tStr+'.csv'
