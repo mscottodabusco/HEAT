@@ -88,10 +88,10 @@ def loadEnviron():
         ### PARAVIEW
         #Include the location of the paraview binaries if we 
         #Specifically we need the python libs and pvpython
-        #PVPath = homeDir + '/lib/python3.8/site-packages'
-        #pvpythonCMD = homeDir + '/opt/paraview/bin/pvpython'
-        PVPath = '/usr/lib/python3/dist-packages'
-        pvpythonCMD = '/bin/pvpython'
+        PVPath = homeDir + '/lib/python3.8/site-packages'
+        pvpythonCMD = homeDir + '/opt/paraview/bin/pvpython'
+        #PVPath = '/usr/lib/python3/dist-packages'
+        #pvpythonCMD = '/bin/pvpython'
 
         ### FREECAD
         #docker ubuntu repo freecad path
