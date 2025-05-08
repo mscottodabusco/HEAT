@@ -105,9 +105,9 @@ def loadEnviron():
 
         ### OPENFOAM
         #default openFOAM source path
-        OFbashrc = homeDir + '/builds/openfoam/etc/bashrc'
+        OFbashrc = homeDir + '/opt/openfoam/etc/bashrc'
         #python site packages where PyFoam resides
-        pyFoamPath = '/usr/local/lib/python3.10/dist-packages'
+        pyFoamPath = homeDir + '/.local/lib/python3.8/site-packages'
 
         #open3d is now installed via package manager
         O3Dpath = None
