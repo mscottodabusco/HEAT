@@ -60,7 +60,7 @@ def setupForTerminalUse(gFile=None, shot=None, time=None):
 
 
     if gFile!=None:
-        print("Making MHD() object with ep included")
+        print("Making MHD() object with included")
         #single geqdsk
         if type(gFile)==str:
             MHD.ep = EP.equilParams(gFile)

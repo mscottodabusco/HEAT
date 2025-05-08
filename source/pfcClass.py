@@ -140,6 +140,11 @@ class PFC:
         PFC.phiMin = phi.min()
         PFC.phiMax = phi.max()
 
+        #get list of neighbours for all triangles in mesh
+        self.allNeighbours = [0]*self.Nfaces
+        for i,facet in enumerate(self.mesh.Facets):
+            self.allNeighbours[i] = facet.NeighbourIndices
+        
         #phi vector at each mesh center
         self.phiVec = np.zeros((len(R), 3))
         self.phiVec[:,0] = -np.cos(np.pi/2.0 - phi)
@@ -356,7 +361,6 @@ class PFC:
         log.info(str(np.sum(~inside)) + ' Field lines left the bounding box\n')
         return inside, idx
         
-        
     def removeOutsideFacingFacets(self, Ctrs, Norms, MHD, threshold = -0.2):
         """
         Calculates the scalar product of face normal and vector from plasma (R0,Z0) to face center:
@@ -394,7 +398,7 @@ class PFC:
         	print('WARNING: Outside Facing filter should not filter anything, but it does.', Nfiltered, 'faces are neglected')
         	log.info('WARNING: Outside Facing filter should not filter anything, but it does. ' + str(Nfiltered) + ' faces are neglected')
         return facingOut
-        
+
 
     def findOpticalShadowsOpen3D(self,MHD,CAD,verbose=False, shadowMaskClouds=False):
         """

@@ -390,6 +390,17 @@ class plasma3D:
 		bbLimits = str(self.bbRmin) + ',' + str(self.bbRmax) + ',' + str(self.bbZmin) + ',' + str(self.bbZmax)
 		args = ['mpirun','-n',str(self.NCPUs),'heatlaminar_mpi','-P','points3DHF.dat','-B',bbLimits,'_lamCTL.dat',tag]
 		current_env = os.environ.copy()        #Copy the current environment (important when in appImage mode)
+		#print(self.cwd)
+		#cheatlaminar = os.system("which heatlaminar_mpi")
+		#cmpirun = os.system("which mpirun")
+		#ccwd = os.system("cwd")
+		#cls = os.system("ls")
+		#cecho = os.system("echo $LD_LIBRARY_PATH")
+		#print(cheatlaminar)
+		#print(cmpirun)
+		#print(ccwd)
+		#print(cls)
+		#print(cecho)		
 		subprocess.run(args, env=current_env, cwd=self.cwd, stderr=DEVNULL)
 		#print('mpirun -n ' + str(self.NCPUs) + ' heatlaminar_mpi' + ' -P points3DHF.dat' + ' _lamCTL.dat' + ' ' + tag)
 		
@@ -448,25 +459,28 @@ class plasma3D:
 		#self.writeCoilsupFile()
 
 		# normalization profile data
-		for tag in ['LI','LO','UI','UO']:
-			src = path + '/../' + 'lam_' + tag + '.dat'
-			dst = self.cwd + '/../' + 'lam_' + tag + '.dat'
-			if (not os.path.isfile(dst)) & os.path.isfile(src): 
-				shutil.copy(src, dst)
+		#for tag in ['LI','LO','UI','UO']:
+		#	src = path + '/../' + 'lam_' + tag + '.dat'
+		#	dst = self.cwd + '/../' + 'lam_' + tag + '.dat'
+		#	if (not os.path.isfile(dst)) & os.path.isfile(src): 
+		#		shutil.copy(src, dst)
 		
 		# main data
 		src = path + '/' + 'lam_' + tag + '.dat'
 		dst = self.cwd + '/' + 'lam_' + tag + '.dat'
 		if os.path.isfile(src): 
 			shutil.copy(src, dst)
+			val = 1
 		else:
 			print('MAFOT output file: ' + src + ' not found!')
 			log.info('MAFOT output file: ' + src + ' not found!')
+			val = -1
 		
 		print('Copy and load 3D MAFOT Laminar data from file: ' + src)
 		log.info('Copy and load 3D MAFOT Laminar data from file: ' + src)
 		self.readLaminar(tag)
-		return
+
+		return val
 		
 		
 	def checkValidOutput(self):
@@ -607,12 +621,16 @@ class heatflux3D:
 		self.q0 = None
 		self.ep = None	# equilParams_class instance for EFIT equilibrium
 		self.HFS = None	# True: use high field side SOL, False: use low field side SOL
+		self.fluxExpansion = None
 		
 		#Default inputs
 		self.NCPUs = 100
 		self.teProfileData = None
 		self.neProfileData = None
-		
+		self.scaleSmooth = 1.0
+		self.loadHF = False
+		self.loadBasePath = None
+
     
 	def allowed_class_vars(self):
 		"""
@@ -644,11 +662,15 @@ class heatflux3D:
 		  or comma-separated array (ne data vs psi=linspace(0,1.1,len(ne)))
 		:kappa: float, electron heat conductivity
 		:model: string in [layer, conductive, convective] to select heat flux model 
+		:loadHF: boolean, True means load previous heat flux results instead of 
+		  running MAFOT, False means run MAFOT
+		:loadBasePath: string, Path for find previous results if loadHF is True
 		:NCPUs: integer, number of CPUs to use in MAFOT, default is 10
 		  same as in plasma3D class
+		:scaleSmooth: float, factor to scale the range of the heat flux moving average filter
 		"""
 		self.allowed_vars = ['Lcmin', 'lcfs', 'lqCN', 'S', 'P', 'radFrac', 'qBG', 
-				'teProfileData', 'neProfileData', 'kappa', 'model','NCPUs']
+				'teProfileData', 'neProfileData', 'kappa', 'model', 'q0', 'loadHF','loadBasePath','NCPUs','scaleSmooth']
 
 
 	def setTypes(self):
@@ -656,8 +678,8 @@ class heatflux3D:
 		Set variable types for the stuff that isnt a string from the input file
 		"""
 		integers = ['NCPUs']
-		floats = ['Lcmin', 'lcfs', 'lqCN', 'S', 'P', 'radFrac', 'qBG', 'kappa']
-		bools = []
+		floats = ['Lcmin', 'lcfs', 'lqCN', 'S', 'P', 'radFrac', 'qBG', 'kappa', 'q0', 'scaleSmooth']
+		bools = ['loadHF']
 		setAllTypes(self, integers, floats, bools)
 		
 		# data is an array or list
@@ -688,13 +710,13 @@ class heatflux3D:
 		return
 
 	
-	def initializeHF3D(self, inputDir = None):
+	def initializeHF3D(self, time, inputDir = None):
 		"""
 		Set up basic input vars
 		"""		
 		if inputDir is None: inputDir = os.getcwd()
 		self.inputDir = inputDir
-
+		self.time = tools.makeInt(time)
 		self.Psol = (1 - self.radFrac) * self.P
 			
 		T = self.teProfileData
@@ -760,15 +782,17 @@ class heatflux3D:
 		print('radFrac = ' + str(self.radFrac))
 		print('qBG = ' + str(self.qBG))
 		print('kappa = ' + str(self.kappa))
+		
 		print('#=============================================================')
 		print('#                3D Plasma Variables')
 		print('#=============================================================')
 		print('Lcmin = ' + str(self.Lcmin))
 		print('lcfs = ' + str(self.lcfs))
+		print('q0 = ' +str(self.q0))
 		print('teProfileData = ' + str(self.teProfileData))
 		print('neProfileData = ' + str(self.neProfileData))
 		print('model = ' + str(self.model))
-
+		print('scaleSmooth = ' + str(self.scaleSmooth))
 		log.info('#=============================================================')
 		log.info('#                Optical HF Variables')
 		log.info('#=============================================================')
@@ -778,11 +802,13 @@ class heatflux3D:
 		log.info('radFrac = ' + str(self.radFrac))
 		log.info('qBG = ' + str(self.qBG))
 		log.info('kappa = ' + str(self.kappa))
+		log.info('scaleSmooth = ' + str(self.scaleSmooth))
 		log.info('#=============================================================')
 		log.info('#                3D Plasma Variables')
 		log.info('#=============================================================')
 		log.info('Lcmin = ' + str(self.Lcmin))
 		log.info('lcfs = ' + str(self.lcfs))
+		log.info('q0 = ' +str(self.q0))
 		log.info('teProfileData = ' + str(self.teProfileData))
 		log.info('neProfileData = ' + str(self.neProfileData))
 		log.info('model = ' + str(self.model))
@@ -833,7 +859,7 @@ class heatflux3D:
 		return mask
 		
 	
-	def heatflux(self, DivCode, powerFrac):
+	def heatflux(self, MHD, DivCode, powerFrac):
 		"""
 		computes self.q for the chosen model
 		zeroes out invalid points
@@ -843,10 +869,14 @@ class heatflux3D:
 		print('3D Heat flux model type: ' + self.model)
 		log.info('3D Heat flux model type: ' + self.model)
 		if self.model in ['Layer', 'layer', 'eich', 'Eich', 'heuristic']:
-			if 'O' in DivCode: HFS = False		# an Outer divertor is on low-field-side
-			elif 'I' in DivCode: HFS = True		# an Inner divertor is on High-Field-Side
+			if 'O' in DivCode: 
+				self.fluxExpansion = self.ep.fluxExpansion(target = 'out')
+				self.HFS = False		# an Outer divertor is on low-field-side
+			elif 'I' in DivCode: 
+				self.fluxExpansion = self.ep.fluxExpansion(target = 'in')
+				self.HFS = True		# an Inner divertor is on High-Field-Side
 			else: raise ValueError('PFC Divertor Code cannot be identified. Check your PFC input file')
-			self.HFS = HFS	# True: use high field side SOL, False: use low field side SOL
+			
 			print('Layer width lq =', self.lqCN)
 			print('PFR spread S =', self.S)
 			print('LCFS at', self.lcfs)
@@ -856,7 +886,45 @@ class heatflux3D:
 			log.info('LCFS at ' + str(self.lcfs))
 			log.info('Is on HFS: ' + str(self.HFS))
 			q = self.getq_layer()	# normalized to qmax = 1
-			if self.q0 is None: self.q0 = self.scale_layer(self.lqCN, self.S, self.Psol*powerFrac, DivCode)
+			#n = 1
+			#self.q0 = 2104.1782210525826 #I_Coils = 8 P0
+			#self.q0 = 1134.6137310744118 #I_Coils = 8 P95 filtered
+			#self.q0 = 1903.5651003108342 #I_Coils = 16 P0
+			#self.q0 = 7470.741615821454  #I_Coils = 16 P95
+			#self.q0 = 5870.087632341879  #I_Coils = 16 P95 filtered
+			#self.q0 = 1912.7934793281354 #I_Coils = 24 P0
+			#self.q0 = 13126.10779619692  #I_Coils = 24 P95
+			#self.q0 = 7558.335765311529  #I_Coils = 24 P95 filtered
+			#self.q0 = 2137.6297743701316 #I_Coils = 32 P0
+			#self.q0 = 8762.721136903932  #I_Coils = 32 P95
+			#self.q0 = 6476.637251066767  #I_Coils = 32 P95 filtered
+			#self.q0 =                    #I_Coils = 64 P0
+			#self.q0 = 5797.308446170832  #I_Coils = 64 P95
+			#self.q0 = 5455.493862768618  #I_Coils = 64 P95 filtered
+			#self.q0 =                    #I_Coils = 96 P0
+			#self.q0 = 4562.404231577698  #/5349.036382647068  #I_Coils = 96 P95
+			#self.q0 = 4152.791688980282  #/5388.27168024814   #I_Coils = 96 P95 filtered
+			#self.q0 =                    #I_Coils = 128 P0
+			#self.q0 = 3446.697198222769  #/ #I_Coils = 128 P95
+			#self.q0 = 2772.102362883991  #/ #I_Coils = 128 P95 filtered q0 = 2461.6508333732572 for I(n=1) = 82.4
+			#self.q0 =                    #I_Coils = 160 P0
+			#self.q0 = 5783.307407254678  #I_Coils = 160 P95
+			#self.q0 = 4156.538779540148  #I_Coils = 160 P95 filtered
+			#self.q0 = 1813.026439015331
+			#self.q0 = 2401.0701979213845
+			#self.q0 = 3210.1013030464915
+			#self.q0 = 4386.07676244957
+			#self.q0 = 7558.335765311529
+			#n=2
+			#self.q0 = 750.4583557207268   #I_Coils = 8 P95 filtered
+			#self.q0 = 1533.17666509202    #I_Coils = 16 P95 filtered
+			#self.q0 = 2964.965927449885   #I_Coils = 24 P95 filtered
+			#self.q0 = 2679.529447348313   #I_Coils = 32 P95 filtered
+			#self.q0 = 5050.579305300307   #I_Coils = 64 P95 filtered
+			#self.q0 = 3677.6802983555954  #I_Coils = 96 P95 filtered
+			#self.q0 = 3439.4571915502966  #I_Coils = 128 P95 filtered
+			#self.q0 = 3639.2470700839503  #I_Coils = 160 P95 filtered
+			if self.q0 is None: self.q0 = self.scale_layer(MHD, self.lqCN, self.S, self.Psol*powerFrac, DivCode)
 		elif self.model in ['conduct', 'conductive']:
 			L = np.mean(self.Lc[self.psimin > self.lcfs])*1e3	# average connection length in open field line area in m
 			ratio = self.lqCN/self.S
@@ -1250,7 +1318,7 @@ class heatflux3D:
 		return f(psi)
 
 
-	def scale_layer(self, lq, S, P, DivCode, verfyScaling = True):
+	def scale_layer(self, MHD, lq, S, P, DivCode, verfyScaling = True):
 		"""
 		scales HF using a part of the limiter outline in the g-file 
 		q-profile is obtained using laminar and apply the heat flux layer to psimin
@@ -1262,7 +1330,7 @@ class heatflux3D:
 		return q0
 		"""
 		# Parameter
-		srange = 0.3
+		srange = 0.0334
 		ds = 0.0001
 		Nphi = 36
 		
@@ -1319,10 +1387,52 @@ class heatflux3D:
 		# Use MAFOT to get psimin
 		runLaminar = True
 		tag = DivCode
+
+		if self.loadHF:
+			path = self.loadBasePath + '/' + self.tsFmt.format(self.time)
+			src = path + '/' + 'lam_' + tag + '.dat'
+			dst = self.cwd + '/../' + 'lam_' + tag + '.dat'
+			if os.path.isfile(src): 
+				shutil.copy(src, dst)
+				val = 1
+				print('Copy and load 3D MAFOT Laminar data from file: ' + src)
+			else:
+				print('MAFOT output file: ' + src + ' not found!')
+				log.info('MAFOT output file: ' + src + ' not found!')
+				val = -1
+
 		file = self.cwd + '/../' + 'lam_' + tag + '.dat'
 		if os.path.isfile(file): runLaminar = False		# MAFOT data already available
 
 		if runLaminar:
+			# shadow mask for boundary first
+			#dphi = 10.0
+			#MHD.ittStruct = 1.0
+			#CTLfile = self.cwd  + '_struct_CTL_PB.dat'
+			#self.controlfilePath = self.cwd
+			#self.gridfileStruct = MHD.controlfilePath + 'points_' + tag + '_SM.dat'
+			#self.controlfileStruct = '_struct_CTL_PB.dat'
+			#print('control file Path = ', self.controlfilePath)
+			#print('grid file struct = ', self.gridfileStruct)
+			#print('control file Struct = ', self.controlfileStruct)
+
+			# write point file
+			#with open(self.cwd + '/' + 'points_' + tag + '_SM.dat','w') as f:
+			#	for i in range(len(R)):
+			#		f.write(str(R[i]) + '\t' + str(0.) + '\t' + str(Z[i]) + '\n')
+			#print('Write file points_' + tag + '_SM.dat')
+
+			#run reverse mesh elements
+			#print("-Reverse Trace-")
+			#log.info("-Reverse Trace-")
+			#mapDirectionStruct = -1.0
+			#startIdx = 0 #Match MAFOT sign convention for toroidal direction
+			#MHD.writeControlFile(CTLfile, self.time, mapDirectionStruct, mode='struct')
+			#print('Write Control file')
+			#print('Running HEAT structure ...')
+			#MHD.getMultipleFieldPaths(dphi, self.gridfileStruct, self.controlfilePath, self.controlfileStruct)
+			#print('Run HEAT structure completed !')
+
 			# write points file
 			with open(self.cwd + '/' + 'points_' + tag + '.dat','w') as f:
 				for j in range(Nphi):
@@ -1341,7 +1451,7 @@ class heatflux3D:
 			args = ['mpirun','-n',str(self.NCPUs),'heatlaminar_mpi','-P','points_' + tag + '.dat','-B',bbLimits,'_lamCTL.dat',tag]
 			current_env = os.environ.copy()        #Copy the current environment (important when in appImage mode)
 			subprocess.run(args, env=current_env, cwd=self.cwd, stderr=DEVNULL)
-			for f in glob.glob(self.cwd + '/' + 'log*'): os.remove(f)		#cleanup
+			#for f in glob.glob(self.cwd + '/' + 'log*'): os.remove(f)		#cleanup
 			
 			# move one folder down
 			src = self.cwd + '/' + 'lam_' + tag + '.dat'
@@ -1426,12 +1536,49 @@ class heatflux3D:
 		
 		# Integrate along line and along toroidal angle (axisymm) to get total power
 		P0 = 2*np.pi * integ.simps(R*q, swall)
+		print('P0 = ', P0)
 		#account for nonphysical power
 		if P0 < 0: P0 = -P0
 		#Scale to input power
 		q0 = P/P0
 		return q0	#, q,mask,nB,qpar
 
+	def smoothq(self, allNeighbours, centers, shadowed_mask, q = None):
+		"""
+		smooth heat flux with neighbouring triangles within distance delta
+		this uses all triangles in a mesh, shadowed and unshadowed, but only smoothes the unshadowed ones
+		"""
+		delta = 0.5*self.fluxExpansion * self.S *1e-3 * self.scaleSmooth	# in meters
+		deltasq = delta**2
+		numberOfNeighbours = []
+
+		N_facets = len(centers)
+		qav = np.zeros(N_facets)
+		if q is None:
+			q = np.zeros(N_facets)
+			use = np.where(shadowed_mask == 0)[0]
+			q[use] = self.q		# self.q lives on the 'use' subset 
+
+		if self.scaleSmooth <= 0:				# skip the smoothing and return the input unchanged
+			print('No smoothing of heat flux')
+			log.info('No smoothing of heat flux')
+			return q
+
+		print('Smoothing heat flux with moving average filter within radius: ' + str(np.round(delta*1e3,2)) + ' mm')
+		log.info('Smoothing heat flux with moving average filter within radius: ' + str(np.round(delta*1e3,2)) + ' mm')
+		for idx in range(N_facets):
+			if shadowed_mask[idx] > 0: continue		# skip shadowed triangles 
+			stack = set([idx])
+			getNeighbourTriangleIndices(idx,idx,allNeighbours,centers,deltasq,stack)
+			stack = np.fromiter(stack, int, len(stack))
+			qav[idx] = np.mean(q[stack])
+			numberOfNeighbours.append(len(stack))
+
+		numberOfNeighbours = np.array(numberOfNeighbours)
+		print('Number of triangles used for smoothing: ' + str(int(numberOfNeighbours.mean()+0.5)) + ' ± ' + str(int(numberOfNeighbours.std()+0.5)))
+		log.info('Number of triangles used for smoothing: ' + str(int(numberOfNeighbours.mean()+0.5)) + ' ± ' + str(int(numberOfNeighbours.std()+0.5)))
+
+		return qav
 
 	def scale_layer_circle(self, lq, S, P, DivCode):
 		"""
@@ -2007,5 +2154,33 @@ def checkScaling(file, plotme =True):
 		
 	return swall, qpar
 	
+
+
+def getNeighbourTriangleIndices(k,idx,allNeighbours,centers,deltasq,stack):
+	"""
+	Recursive algorithm to find indices of all neighbouring triangles to source triangle idx 
+	within distance delta, with deltasq = delta**2, of respective centers.
+	k is index of current triangle
+	idx is index of source triangle
+	allNeighbours is list of 3-tupples of neighbour indices for each triangle in mesh
+	centers is list of (xyz) center coordinates for each triangle in mesh 
+	stack is a set of a list of the neighbours of idx within distance delta
+	stack gets recursively updated by this algorithm
+	initial call with k = idx; stack = set([idx]); deltasq = delta**2
 	
-	
+	# for a given mesh
+	N_facets = mesh.CountFacets
+	norms,centers,areas = CAD.normsCentersAreas(mesh)
+	allNeighbours = [0]*N_facets
+	for i,facet in enumerate(mesh.Facets):
+		allNeighbours[i] = facet.NeighbourIndices
+	"""
+	#neighbours = mesh.Facets[k].NeighbourIndices	# DO NOT USE THIS: this is very slow!
+	neighbours = allNeighbours[k]
+	for n in neighbours: 
+		if n in stack: continue
+		if n.bit_length() >= 64: continue
+		distancesq = (centers[n,0] - centers[idx,0])**2 + (centers[n,1] - centers[idx,1])**2 + (centers[n,2] - centers[idx,2])**2
+		if distancesq < deltasq: 
+			stack.add(n)
+			getNeighbourTriangleIndices(n,idx,allNeighbours,centers,deltasq,stack)

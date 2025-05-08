@@ -1739,7 +1739,7 @@ class engineObj():
                 gFile = self.MHD.shotPath + self.tsFmt.format(t) + '/' + self.MHD.gFiles[tIdx]
                 self.plasma3D.initializePlasma3D(self.MHD.shot, t, self.MHD.timesteps, gFile, self.MHD.tmpDir[0:-1])   # remove / at the end of paths   Also: this no longer reads the input file. This is now done by self.loadInputs
                 self.plasma3D.setBoundaryBox(self.MHD, self.CAD)
-                self.hf3D.initializeHF3D(self.MHD.tmpDir[0:-1])     # this no longer reads the input file. This is now done by self.loadInputs
+                self.hf3D.initializeHF3D(t, self.MHD.tmpDir[0:-1])     # this no longer reads the input file. This is now done by self.loadInputs
                 self.plasma3D.print_settings()
                 self.hf3D.print_settings()
             
@@ -2030,10 +2030,11 @@ class engineObj():
 
         # Reset M3D-C1 suppplemental file if the perturbation rotates
         if self.plasma3D.frequency != 0.:
-            src = self.plasma3D.inputDir + '/' + 'm3dc1supref.in'
-            dst = self.plasma3D.inputDir + '/' + 'm3dc1sup.in'
-            shutil.copy(src, dst)
-            os.remove(self.plasma3D.inputDir + '/' + 'm3dc1supref.in')
+            if os.path.isfile(self.plasma3D.inputDir + '/' + 'm3dc1supref.in'):
+                src = self.plasma3D.inputDir + '/' + 'm3dc1supref.in'
+                dst = self.plasma3D.inputDir + '/' + 'm3dc1sup.in'
+                shutil.copy(src, dst)
+                os.remove(self.plasma3D.inputDir + '/' + 'm3dc1supref.in')
 
         #copy HEAT logfile to shotpath
         #shutil.copyfile(self.logFile, self.MHD.shotPath+'HEATlog.txt')			#AW: this is a strange place for this command, runHEAT is not complete yet. The same call is already in terminalUI, just after runHEAT is complete
@@ -2486,9 +2487,9 @@ class engineObj():
             f = self.HF.maskFilePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name + '/' + self.HF.maskFileTag
             val = plasma3DClass.readShadowFile(f, PFC)
         # ----- Not necessary now and to be integrated with mask and q flags ----- 
-        if self.plasma3D.loadHF:
-            f = self.plasma3D.loadBasePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name + '/shadowMask.csv'
-            val = plasma3DClass.readShadowFile(f, PFC)
+        #if self.plasma3D.loadHF:
+        #    f = self.plasma3D.loadBasePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name + '/shadowMask.csv'
+        #    val = plasma3DClass.readShadowFile(f, PFC)
         # ------------------------------------------------------------------------
         if val == -1:
             #check if this is a repeated MHD EQ
@@ -2514,14 +2515,17 @@ class engineObj():
             log.info('\n----Solving for 3D plasmas with MAFOT----')
             use = np.where(PFC.shadowed_mask == 0)[0]
             if use.size !=0:
-                #self.plasma3D.updatePointsFromCenters(PFC.centers[use])
-                self.plasma3D.updatePointsFromVertices(PFC.vertices['x'][use,:], PFC.vertices['y'][use,:], PFC.vertices['z'][use,:], PFC.centers[use])
+                self.plasma3D.updatePointsFromCenters(PFC.centers[use])
+                #self.plasma3D.updatePointsFromVertices(PFC.vertices['x'][use,:], PFC.vertices['y'][use,:], PFC.vertices['z'][use,:], PFC.centers[use])
                 if self.plasma3D.loadHF:
                     f = self.plasma3D.loadBasePath + '/' + self.HF.tsFmt.format(PFC.t) + '/' + PFC.name
-                    self.plasma3D.copyAndRead(path = f, tag = 'opticalHF')
+                    val = self.plasma3D.copyAndRead(path = f, tag = 'opticalHF')
+                    if val == -1:
+                        self.plasma3D.launchLaminar(self.NCPUs, tag = 'opticalHF')   # use MapDirection = 0. If problem, then we need to split here into fwd and bwd direction separately
+                        #self.plasma3D.cleanUp(tag = 'opticalHF')      # removes the MAFOT log files
                 else: 
                     self.plasma3D.launchLaminar(self.NCPUs, tag = 'opticalHF')   # use MapDirection = 0. If problem, then we need to split here into fwd and bwd direction separately
-                    self.plasma3D.cleanUp(tag = 'opticalHF')      # removes the MAFOT log files
+                    #self.plasma3D.cleanUp(tag = 'opticalHF')      # removes the MAFOT log files
             
                 # check for invalid points (psimin = 10) and remove; there should be none, but just in case
                 invalid = self.plasma3D.checkValidOutput()    # this does NOT change self.plasma3D.psimin
@@ -2541,12 +2545,15 @@ class engineObj():
                 log.info('\n----Calculating 3D Heat Flux Profile----')
                 self.hf3D.updateLaminarData(PFC.psimin[use],PFC.Lc[use])
                 PFC.powerFrac = self.HF.getDivertorPowerFraction(PFC.DivCode)
-                self.hf3D.heatflux(PFC.DivCode, PFC.powerFrac)                # heat flux is scaled by power fraction here
+                self.hf3D.heatflux(self.MHD,PFC.DivCode, PFC.powerFrac)                # heat flux is scaled by power fraction here
                 print("PFC "+PFC.name+" has {:.2f}% of the total power".format(PFC.powerFrac*100.0))
                 log.info("PFC "+PFC.name+" has {:.2f}% of the total power".format(PFC.powerFrac*100.0))
 
+                # assign and smooth the parallel heat flux
                 q = np.zeros(PFC.centers[:,0].shape)
                 q[use] = self.hf3D.q                                          # this is the parallel heat flux q||
+                q = self.hf3D.smoothq(PFC.allNeighbours, PFC.centers, PFC.shadowed_mask, q = q)     # give full grid variables, not 'use' subset
+                
                 qDiv = np.zeros(PFC.centers[:,0].shape)
                 qDiv[use] = q[use] * np.abs(PFC.bdotn[use]) * self.HF.elecFrac        # this is the incident heat flux
             else:
@@ -3323,7 +3330,7 @@ class engineObj():
             log.info('Solving for 3D plasmas with MAFOT')
             self.plasma3D.updatePointsFromCenters(PFC.centers)
             self.plasma3D.launchLaminar(self.NCPUs, tag = 'psiOnly')
-            self.plasma3D.cleanUp(tag = 'psiOnly')      # removes the MAFOT log files
+            #self.plasma3D.cleanUp(tag = 'psiOnly')      # removes the MAFOT log files
             invalid = self.plasma3D.checkValidOutput()    # this does not update self.plasma3D.psimin
             if(np.sum(invalid) > 0): 
                 print('****** WARNING *******')
@@ -3441,8 +3448,10 @@ class engineObj():
                     'frequency':None,
                     'Lcmin':None,
                     'lcfs':None,
+                    #'q0': None,
                     'teProfileData':None,
                     'neProfileData':None,
+                    'scaleSmooth':None,
                     'kappa':None,
                     'model':None,
                     }
@@ -3541,8 +3550,12 @@ class engineObj():
                     'frequency':self.plasma3D.frequency,
                     'Lcmin':self.hf3D.Lcmin,
                     'lcfs':self.hf3D.lcfs, 
+                    #'q0':self.hf3D.q0,
                     'teProfileData':self.hf3D.teProfileData,
                     'neProfileData':self.hf3D.neProfileData,
+                    'loadHF':self.hf3D.loadHF,
+                    'loadBasePath':self.hf3D.loadBasePath,
+                    'scaleSmooth':self.hf3D.scaleSmooth,
                     'kappa':self.hf3D.kappa,
                     'model':self.hf3D.model
                     }
@@ -3628,8 +3641,12 @@ class engineObj():
                     'frequency':self.plasma3D.frequency,
                     'Lcmin':self.hf3D.Lcmin,
                     'lcfs':self.hf3D.lcfs, 
+                    #'q0':self.hf3D.q0,
                     'teProfileData':self.hf3D.teProfileData,
                     'neProfileData':self.hf3D.neProfileData,
+                    'loadHF':self.hf3D.loadHF,
+                    'loadBasePath':self.hf3D.loadBasePath,
+                    'scaleSmooth':self.hf3D.scaleSmooth,
                     'kappa':self.hf3D.kappa,
                     'model':self.hf3D.model
                     }
