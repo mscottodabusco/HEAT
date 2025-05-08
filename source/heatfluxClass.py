@@ -14,7 +14,7 @@ tools = toolsClass.tools()
 import EFIT.equilParams_class as EP
 import scipy.interpolate as scinter
 from scipy.optimize import bisect
-from scipy.integrate import simpson
+from scipy.integrate import simpson as simps
 
 import multiprocessing
 
