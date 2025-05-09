@@ -203,6 +203,29 @@ class IO_HEAT:
 
         VTKops.writeGlyphVTP(f)
         return
+    
+    def writeTraceVTP(self, csvfile, tag, path):
+        """
+        Creates a trace through points given in the xyz array and saves it as a VTK or VTP file.
+
+        Parameters:
+        - csvfile: file containing x,y,z data of trace points
+        - tag: tag / name of the output file
+        - path: Directory to save the output file
+        """
+        print("Creating Trace "+tag)
+        log.info("Creating Glyph "+tag)   
+
+        xyz = np.genfromtxt(csvfile, comments='#', delimiter=',')
+
+        fName = tag+ '.vtp'
+        PVdir = path + "paraview/"
+        f = PVdir+fName
+        tools.makeDir(PVdir, clobberFlag=False, mode=self.chmod, UID=self.UID, GID=self.GID)
+
+        VTKops = vtkOpsClass.VTKops()
+        VTKops.writeTraceVTP(xyz, f)
+        return
 
 
     def writePointCloudCSV(self,centers,Scalar,dataPath,label,tag=None,prefix='Undefined'):
@@ -247,3 +270,13 @@ class IO_HEAT:
         data[:,5] = vecs[:,2]
         np.savetxt(pcfile, data, delimiter=',',fmt='%.10f', header=head)
         return
+
+    def readJSON(self, filename):
+        """
+        reads a JSON file into data object
+        """
+        import json
+        with open(filename, 'r') as file:
+            data = json.load(file) 
+        return data
+    
