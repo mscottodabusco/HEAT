@@ -669,9 +669,12 @@ class heatflux3D:
 		  same as in plasma3D class
 		:scaleSmooth: float, factor to scale the range of the heat flux moving average filter
 		"""
-		self.allowed_vars = ['Lcmin', 'lcfs', 'lqCN', 'S', 'P', 'radFrac', 'qBG', 
-				'teProfileData', 'neProfileData', 'kappa', 'model', 'q0', 'loadHF','loadBasePath','NCPUs','scaleSmooth']
-
+		if self.q0 is None:
+			self.allowed_vars = ['Lcmin', 'lcfs', 'lqCN', 'S', 'P', 'radFrac', 'qBG', 
+					'teProfileData', 'neProfileData', 'kappa', 'model', 'q0', 'loadHF','loadBasePath','NCPUs','scaleSmooth']
+		else:
+			self.allowed_vars = ['Lcmin', 'lcfs', 'lqCN', 'S', 'P', 'radFrac', 'qBG',
+                                        'teProfileData', 'neProfileData', 'kappa', 'model', 'loadHF','loadBasePath','NCPUs','scaleSmooth']
 
 	def setTypes(self):
 		"""

@@ -3449,7 +3449,7 @@ class engineObj():
                     'frequency':None,
                     'Lcmin':None,
                     'lcfs':None,
-                    #'q0': None,
+                    'q0': None,
                     'teProfileData':None,
                     'neProfileData':None,
                     'scaleSmooth':None,
@@ -3550,8 +3550,8 @@ class engineObj():
                     'NCPUs':self.plasma3D.NCPUs,
                     'frequency':self.plasma3D.frequency,
                     'Lcmin':self.hf3D.Lcmin,
-                    'lcfs':self.hf3D.lcfs, 
-                    #'q0':self.hf3D.q0,
+                    'lcfs':self.hf3D.lcfs,
+                    'q0':self.hf3D.q0,
                     'teProfileData':self.hf3D.teProfileData,
                     'neProfileData':self.hf3D.neProfileData,
                     'loadHF':self.hf3D.loadHF,
@@ -3560,7 +3560,8 @@ class engineObj():
                     'kappa':self.hf3D.kappa,
                     'model':self.hf3D.model
                     }
-        print("Loaded inputs")
+
+        print('q0 = ', self.hf3D.q0)
 
         return inputDict
 
@@ -3641,8 +3642,8 @@ class engineObj():
                     'NCPUs':self.plasma3D.NCPUs,
                     'frequency':self.plasma3D.frequency,
                     'Lcmin':self.hf3D.Lcmin,
-                    'lcfs':self.hf3D.lcfs, 
-                    #'q0':self.hf3D.q0,
+                    'lcfs':self.hf3D.lcfs,
+                    'q0':self.hf3D.q0,
                     'teProfileData':self.hf3D.teProfileData,
                     'neProfileData':self.hf3D.neProfileData,
                     'loadHF':self.hf3D.loadHF,
@@ -3651,7 +3652,6 @@ class engineObj():
                     'kappa':self.hf3D.kappa,
                     'model':self.hf3D.model
                     }
-        print("Loaded current inputs")
 
         return inputDict
 
