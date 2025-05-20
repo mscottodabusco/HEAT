@@ -2029,12 +2029,13 @@ class engineObj():
                 self.combineTimeSteps(runList, t)
 
         # Reset M3D-C1 suppplemental file if the perturbation rotates
-        if self.plasma3D.frequency != 0.:
-            if os.path.isfile(self.plasma3D.inputDir + '/' + 'm3dc1supref.in'):
-                src = self.plasma3D.inputDir + '/' + 'm3dc1supref.in'
-                dst = self.plasma3D.inputDir + '/' + 'm3dc1sup.in'
-                shutil.copy(src, dst)
-                os.remove(self.plasma3D.inputDir + '/' + 'm3dc1supref.in')
+        if self.plasma3D.plasma3Dmask:
+           if self.plasma3D.frequency != 0.:
+              if os.path.isfile(self.plasma3D.inputDir + '/' + 'm3dc1supref.in'):
+                 src = self.plasma3D.inputDir + '/' + 'm3dc1supref.in'
+                 dst = self.plasma3D.inputDir + '/' + 'm3dc1sup.in'
+                 shutil.copy(src, dst)
+                 os.remove(self.plasma3D.inputDir + '/' + 'm3dc1supref.in')
 
         #copy HEAT logfile to shotpath
         #shutil.copyfile(self.logFile, self.MHD.shotPath+'HEATlog.txt')			#AW: this is a strange place for this command, runHEAT is not complete yet. The same call is already in terminalUI, just after runHEAT is complete

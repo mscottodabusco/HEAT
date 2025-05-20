@@ -83,20 +83,19 @@ def loadEnviron():
 
         ### USER ROOT HEATDIR
         #Root HEAT source code directory
-        rootDir = homeDir + '/source/HEAT/source'
+        rootDir = homeDir + '/source/HEAT/'
+        #default AppDir for when running in docker mode
+        AppDir = os.environ["APPDIR"]
 
         ### PARAVIEW
-        #Include the location of the paraview binaries if we 
+        #Include the location of the paraview binaries.
         #Specifically we need the python libs and pvpython
         PVPath = homeDir + '/lib/python3.8/site-packages'
         pvpythonCMD = homeDir + '/opt/paraview/bin/pvpython'
-        #PVPath = '/usr/lib/python3/dist-packages'
-        #pvpythonCMD = '/bin/pvpython'
 
         ### FREECAD
         #docker ubuntu repo freecad path
         FreeCADPath = '/usr/lib/freecad-python3/lib'
-        FreeCADFEMPath = '/lib/freecad/Mod/Fem'
         #FreeCADPath = '/usr/lib/freecad-daily/lib'
 
         ### ORNL EFIT CLASS
@@ -104,55 +103,22 @@ def loadEnviron():
         EFITPath = homeDir + '/source'
 
         ### OPENFOAM
-        #default openFOAM source path
-        OFbashrc = homeDir + '/opt/openfoam/etc/bashrc'
+        #default openFOAM source path v1912
+        #OFbashrc = '/opt/openfoam/openfoam-OpenFOAM-v1912/etc/bashrc'
+        #default openFOAM source path v2106
+        OFbashrc = AppDir + '/opt/openfoam/etc/bashrc'
         #python site packages where PyFoam resides
         pyFoamPath = homeDir + '/.local/lib/python3.8/site-packages'
+        #pyFoam python scripts
+        pyFoamPath = '/'
 
-        #open3d is now installed via package manager
-        O3Dpath = None
+        ### Open3D
+        O3Dpath = AppDir + '/opt/open3d/lib/python_package'
 
-        ### OLD PART USED TO RUN ON BB8                    ###
-        ### TO DO LIST: CHECK NEW ENVIRONMENT WORKS ON BB8 ###
-        #### USER ROOT HEATDIR
-        ##Root HEAT source code directory
-        #rootDir = homeDir + '/source/HEAT/'
-        ##default AppDir for when running in docker mode
-        #AppDir = os.environ["APPDIR"]
-
-        #### PARAVIEW
-        ##Include the location of the paraview binaries.
-        ##Specifically we need the python libs and pvpython
-        #PVPath = homeDir + '/lib/python3.8/site-packages'
-        #pvpythonCMD = homeDir + '/opt/paraview/bin/pvpython'
-
-        #### FREECAD
-        ##docker ubuntu repo freecad path
-        #FreeCADPath = '/usr/lib/freecad-python3/lib'
-        ##FreeCADPath = '/usr/lib/freecad-daily/lib'
-
-        #### ORNL EFIT CLASS
-        ##default source code location (EFIT class should be here)
-        #EFITPath = homeDir + '/source'
-
-        #### OPENFOAM
-        ##default openFOAM source path v1912
-        ##OFbashrc = '/opt/openfoam/openfoam-OpenFOAM-v1912/etc/bashrc'
-        ##default openFOAM source path v2106
-        #OFbashrc = AppDir + '/opt/openfoam/etc/bashrc'
-        ##python site packages where PyFoam resides
-        #pyFoamPath = homeDir + '/.local/lib/python3.8/site-packages'
-        ##pyFoam python scripts
-        #pyFoamPath = '/'
-
-        #### Open3D
-        #O3Dpath = AppDir + '/opt/open3d/lib/python_package'
-
-        ##ENV VARS
-        ##create necessary environment variables when outside appImage
-        #os.environ["PVPath"] = PVPath
-        #os.environ["pvpythonCMD"] = pvpythonCMD
-        ### END MODIFCATION ###
+        #ENV VARS
+        #create necessary environment variables when outside appImage
+        os.environ["PVPath"] = PVPath
+        os.environ["pvpythonCMD"] = pvpythonCMD
 
         #local development mode
     else:

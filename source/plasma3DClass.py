@@ -845,8 +845,8 @@ class heatflux3D:
 		fails = np.where(self.psimin == 10)
 		mask[fails] = False
 		return mask
-		
-		
+
+
 	def isPFR(self):
 		"""
 		Returns a boolean mask for point in PFR or not
@@ -857,8 +857,73 @@ class heatflux3D:
 		pfr = np.where((self.psimin < 1) & (self.Lc < self.Lcmin))
 		mask[pfr] = True
 		return mask
-		
-	
+
+
+	def readStructOutput(self, file):
+		"""
+		Reads output file from MAFOT structure program
+		"""
+
+		structdata = np.genfromtxt(file,comments='#')
+
+		print('Read structure output for {:d} points'.format(len(structdata)))
+		log.info('Read structure output for {:d} points'.format(len(structdata)))
+
+		return structdata
+
+
+	def findOpticalShadowgfile(self, structdata, mapdir=-1):
+		"""
+		Find shadowed points for a given region of the g-file limiter
+		using MAFOT structure. Traces field lines from limiter points,
+		to identify those that intersect the g-file limiter. Return a
+		mask of the points at the limiter wall which are not
+		shadoowed.
+		"""
+		#Organize struct data
+		xyz = np.zeros((len(structdata),3))
+		xyz[:,0] = structdata[:,0]
+		xyz[:,1] = structdata[:,1]
+		xyz[:,2] = structdata[:,2]
+		Z = structdata[:,2]
+		R = structdata[:,3]
+		phi = np.degrees(structdata[:,4])
+		psi = structdata[:,5]
+		Lc = structdata[:,6]
+		dpsidLc = structdata[:,7]
+
+		if mapdir == -1:
+			R1 = R[1::2]
+			R2 = R[0::2]
+			Z1 = Z[1::2]
+			Z2 = Z[0::2]
+			psi1 = psi[1::2]
+			psi2 = psi[0::2]
+			Lc1 = Lc[1::2]
+			Lc2 = Lc[0::2]
+		else:
+			R1 = R[0::2]
+			R2 = R[1::2]
+			Z1 = Z[0::2]
+			Z2 = Z[1::2]
+			psi1 = psi[0::2]
+			psi2 = psi[1::2]
+			Lc1 = Lc[0::2]
+			Lc2 = Lc[1::2]
+
+		ispfr = np.where(psi1<1)[0]
+		issol = np.where(psi1>=1)[0]
+
+		mask = np.zeros(len(R1), dtype = bool)
+		# PFR
+		sppfr = np.where(Lc1[ispfr]>np.mean(Lc1[ispfr]))
+		mask[ispfr[sppfr]] = True
+		# SOL
+		spsol = np.where(Lc1[issol]>np.max(Lc1[ispfr]))
+		mask[issol[spsol]] = True
+
+		return mask
+
 	def heatflux(self, MHD, DivCode, powerFrac):
 		"""
 		computes self.q for the chosen model
@@ -1289,13 +1354,13 @@ class heatflux3D:
 			x0 = smax
 		else:
 			x0 = s0 - (smax-s0)	# now the peak amplitude is at psi = lcfs; qlcfs = qmax too
-					
+
 		q = eich_profile(x, lq, S, x0, q0 = 1, qBG = 0, fx = 1)
 		qsep = eich_profile(xsep, lq, S, x0, q0 = 1, qBG = 0, fx = 1)
-		
+
 		if lobes:
 			q[psi < lcfs] = qmax
-		
+
 		return q*q0/qmax, qsep*q0/qmax
 
 
@@ -1310,10 +1375,11 @@ class heatflux3D:
 			R = np.linspace(self.ep.g['RmAxis'], self.ep.g['R1'], 100)
 		else:
 			R = np.linspace(self.ep.g['RmAxis'], self.ep.g['R1'] + self.ep.g['Xdim'], 100)
-			
+
 		Z = self.ep.g['ZmAxis']*np.ones(len(R))
 		p = self.ep.psiFunc.ev(R,Z)
-		
+
+
 		f = scinter.UnivariateSpline(p, R, s = 0, ext = 'const')	# psi outside of spline domain return the boundary value
 		return f(psi)
 
@@ -1330,17 +1396,18 @@ class heatflux3D:
 		return q0
 		"""
 		# Parameter
-		srange = 0.0334
+		#srange = 0.0334
+		srange = 0.3
 		ds = 0.0001
 		Nphi = 36
-		
+
 		# strike lines
 		d = self.ep.strikeLines()
-		if d is None: 		
+		if d is None:
 			# this means inner wall limited
 			s0 = 0	# inner wall at Z = Zaxis 						!!!!!!! this needs to be computed properly !!!!!!!!!
 			swall = np.arange(s0-srange, s0+srange, ds)
-		else:				
+		else:
 			# find strike point for DivCode (this is to double check and prevent missmatches)
 			if 'Rin2' in d: N = 4
 			else: N = 2
@@ -1352,7 +1419,7 @@ class heatflux3D:
 				Rstr[i] = d['R' + keys[i]]
 				Zstr[i] = d['Z' + keys[i]]
 				Sstr[i] = d['swall' + keys[i]]
-		
+
 			if 'L' in DivCode:					# Lower divertor, always 2 strike points
 				Rtmp = Rstr[Zstr < 0]
 				Ztmp = Zstr[Zstr < 0]
@@ -1361,10 +1428,10 @@ class heatflux3D:
 				Rtmp = Rstr[Zstr > 0]
 				Ztmp = Zstr[Zstr > 0]
 				Stmp = Sstr[Zstr > 0]
-		
-			if len(Rtmp) < 2: 
+
+			if len(Rtmp) < 2:
 				raise RuntimeError('No strike points found for divertor ' + DivCode)
-	
+
 			# s0 is the strike point and s1 is the "other" strike point we don't want
 			if 'I' in DivCode:
 				if Rtmp[0] < Rtmp[1]: s0,s1 = Stmp[0],Stmp[1]
@@ -1400,38 +1467,63 @@ class heatflux3D:
 				print('MAFOT output file: ' + src + ' not found!')
 				log.info('MAFOT output file: ' + src + ' not found!')
 				val = -1
+		#	src = path + '/' + 'qpar_' + tag + '.dat'
+		#	dst = self.cwd + '/../' + 'qpar_' + tag + '.dat'
+		#	if os.path.isfile(src): 
+		#		shutil.copy(src, dst)
+		#		val = 1
+		#		print('Copy and load 3D q parallel  data from file: ' + src)
+		#	else:
+		#		print('qpar output file: ' + src + ' not found!')
+		#		log.info('qpar output file: ' + src + ' not found!')
+		#		val = -1
+
 
 		file = self.cwd + '/../' + 'lam_' + tag + '.dat'
 		if os.path.isfile(file): runLaminar = False		# MAFOT data already available
 
 		if runLaminar:
-			# shadow mask for boundary first
-			#dphi = 10.0
-			#MHD.ittStruct = 1.0
-			#CTLfile = self.cwd  + '_struct_CTL_PB.dat'
-			#self.controlfilePath = self.cwd
-			#self.gridfileStruct = MHD.controlfilePath + 'points_' + tag + '_SM.dat'
-			#self.controlfileStruct = '_struct_CTL_PB.dat'
-			#print('control file Path = ', self.controlfilePath)
-			#print('grid file struct = ', self.gridfileStruct)
-			#print('control file Struct = ', self.controlfileStruct)
+			"""
+			First, identify the shadowed points on the g-file wall.
+			The heatstructure module in MAFOT is used to trace field lines 
+			starting from the g-file wall over a 90^o toroidal segment.
+			The laminar module in MAFOT does not account for the presence of the wall,
+			so this preliminary step is essential to exclude regions where power deposition would be unphysical
+			"""
+			print('Finding shadowwed points for power balance')
+			dphi = 1800.0
+			MHD.phistart = 0.
+			MHD.dpinit = 0.05
+			MHD.ittStruct = 1.0
+			CTLfile = self.cwd  + '/' + '_struct_CTL_PB.dat'
+			self.controlfilePath = self.cwd + '/'
+			self.gridfileStruct = self.controlfilePath + 'points_' + tag + '_SM.dat'
+			self.controlfileStruct = '_struct_CTL_PB.dat'
+			self.structOutfile = self.controlfilePath + 'struct.dat'
 
-			# write point file
-			#with open(self.cwd + '/' + 'points_' + tag + '_SM.dat','w') as f:
-			#	for i in range(len(R)):
-			#		f.write(str(R[i]) + '\t' + str(0.) + '\t' + str(Z[i]) + '\n')
-			#print('Write file points_' + tag + '_SM.dat')
+			gridfile = self.cwd + '/' + 'points_' + tag + '_SM.dat'
+			phi = np.zeros(len(R))
+			array = np.column_stack((R,phi,Z))
+			np.savetxt(gridfile, array, delimiter='\t',fmt='%.10f')
+
+			print('Write file points_' + tag + '_SM.dat')
 
 			#run reverse mesh elements
-			#print("-Reverse Trace-")
-			#log.info("-Reverse Trace-")
-			#mapDirectionStruct = -1.0
-			#startIdx = 0 #Match MAFOT sign convention for toroidal direction
-			#MHD.writeControlFile(CTLfile, self.time, mapDirectionStruct, mode='struct')
-			#print('Write Control file')
-			#print('Running HEAT structure ...')
-			#MHD.getMultipleFieldPaths(dphi, self.gridfileStruct, self.controlfilePath, self.controlfileStruct)
-			#print('Run HEAT structure completed !')
+			print("-Reverse Trace-")
+			log.info("-Reverse Trace-")
+			mapDirectionStruct = -1.0
+			MHD.writeControlFile(CTLfile, self.time, mapDirectionStruct, mode='struct')
+			print('Running HEAT structure ...')
+			MHD.getMultipleFieldPaths(dphi, self.gridfileStruct, self.controlfilePath, self.controlfileStruct, bbox=False)
+			print('Run HEAT structure completed !')
+
+			structData = self.readStructOutput(self.structOutfile)
+			mask = self.findOpticalShadowgfile(structData, mapdir=mapDirectionStruct)
+			R = R[mask]
+			Z = Z[mask]
+			nR = nR[mask]
+			nZ = nZ[mask]
+			swall = swall[mask]
 
 			# write points file
 			with open(self.cwd + '/' + 'points_' + tag + '.dat','w') as f:
@@ -1439,37 +1531,64 @@ class heatflux3D:
 					phi = j*(360.0/Nphi)
 					for i in range(len(R)):
 						f.write(str(R[i]) + '\t' + str(phi) + '\t' + str(Z[i]) + '\n')
-			
+
 			# set bounding box
 			bbRmin = min([R.min()-0.1, self.ep.g['wall'][:,0].min()-0.1])
 			bbRmax = max([R.max()+0.1, self.ep.g['wall'][:,0].max()+0.1])
 			bbZmin = min([Z.min()-0.1, self.ep.g['wall'][:,1].min()-0.1])
 			bbZmax = max([Z.max()+0.1, self.ep.g['wall'][:,1].max()+0.1])
 			bbLimits = str(bbRmin) + ',' + str(bbRmax) + ',' + str(bbZmin) + ',' + str(bbZmax)
-			
+
 			# call MAFOT
 			args = ['mpirun','-n',str(self.NCPUs),'heatlaminar_mpi','-P','points_' + tag + '.dat','-B',bbLimits,'_lamCTL.dat',tag]
 			current_env = os.environ.copy()        #Copy the current environment (important when in appImage mode)
 			subprocess.run(args, env=current_env, cwd=self.cwd, stderr=DEVNULL)
 			#for f in glob.glob(self.cwd + '/' + 'log*'): os.remove(f)		#cleanup
-			
+
 			# move one folder down
 			src = self.cwd + '/' + 'lam_' + tag + '.dat'
 			dst = self.cwd + '/../' + 'lam_' + tag + '.dat'
-			if os.path.isfile(src): 
+			if os.path.isfile(src):
 				shutil.move(src, dst)
-		
+
 		# Read MAFOT data
-		if os.path.isfile(file): 
+		if os.path.isfile(file):
 			lamdata = np.genfromtxt(file,comments='#')
 			Lc = lamdata[:,3]
 			psimin = lamdata[:,4]
+			# need to retreive the mask for shadoweed points when reading from previous run
+			Rlam = lamdata[:,0]
+			Rlam = Rlam[0:len(Rlam)//Nphi]
+			mask = []
+			used_R = set()
+			for i, val_R in enumerate(R):
+				for j, val_Rlam in enumerate(Rlam):
+					if j in used_R:
+						continue
+					if np.abs(val_R - val_Rlam) <= 0.1*ds:
+						mask.append(i)
+						used_R.add(j)
+						break
+			R = R[mask]
+			Z = Z[mask]
+			nR = nR[mask]
+			nZ = nZ[mask]
+			swall = swall[mask]
 			#BR = lamdata[:,6]
 			#BZ = lamdata[:,7]
 			#Bt = lamdata[:,8]
 		else:
-			print('File', file, 'not found') 
-			log.info('File ' + file + ' not found') 
+			print('File', file, 'not found')
+			log.info('File ' + file + ' not found')
+
+		#fileq = self.cwd + '/../' + 'qpar_' + tag + '.dat'   #need to read swall since now just consider unshadoweed points
+		#if os.path.isfile(fileq):
+		#	qpardata = np.genfromtxt(fileq,comments='#')
+		#	swall = qpardata[:,2]
+		#	#recompute R,Z cooridinates and normal vector only for unshadoweed points
+		#	R,Z,nR,nZ = self.ep.all_points_along_wall(swall, get_normal = True)
+
+
 
 		# Find PFR
 		mask = np.zeros(len(psimin), dtype = bool)
@@ -1488,7 +1607,7 @@ class heatflux3D:
 		if verfyScaling:
 			with open(self.cwd + '/../' + 'qpar_' + tag + '.dat','w') as f:
 				f.write('# Parallel heat flux along g-file limiter for this divertor at multiple toroidal angles\n')
-				f.write('# The field line tracing is in file: ' + file + '\n')			
+				f.write('# The field line tracing is in file: ' + file + '\n')
 				f.write('# Nphi = ' + str(Nphi) + '\n')
 				f.write('# lq = ' + str(lq) + '\n')
 				f.write('# S = ' + str(S) + '\n')
@@ -1515,7 +1634,7 @@ class heatflux3D:
 		else:
 			print('Filtering outliers: None found')
 			log.info('Filtering outliers: None found')
-			
+
 		# average over the toroidal angles
 		qparm = qpar.mean(0)
 
@@ -1523,19 +1642,40 @@ class heatflux3D:
 		BR = self.ep.BRFunc.ev(R,Z)
 		Bt = self.ep.BtFunc.ev(R,Z)
 		BZ = self.ep.BZFunc.ev(R,Z)
-		
+
 		#BR = BR.reshape(Nphi,len(R)); BR = BR.mean(0)
 		#BZ = BZ.reshape(Nphi,len(R)); BZ = BZ.mean(0)
 		#Bt = Bt.reshape(Nphi,len(R)); Bt = Bt.mean(0)
 
 		B = np.sqrt(BR**2 + Bt**2 + BZ**2)
 		nB = np.abs(nR*BR + nZ*BZ)/B
-		
+
+		if verfyScaling:
+			with open(self.cwd + '/../' + 'B_' + tag + '.dat','w') as f:
+				f.write('# B field and normal notmalized vector along g-file limiter for this divertor \n')
+				f.write('# R[m]  Z[m]  swall[m]  BR  BZ  Bt  nR  nZ\n')
+				f.write('#\n')
+				for i in range(len(R)):
+					f.write(str(R[i]) + '\t' + str(Z[i]) + '\t' + str(swall[i]) + '\t' + str(BR[i]) + '\t' + str(BZ[i]) + '\t' + str(Bt[i]) + '\t' + str(nR[i]) + '\t' + str(nZ[i]))
+					f.write('\n')
+
 		# perpendicular heat flux
 		q = qparm*nB
-		
+
 		# Integrate along line and along toroidal angle (axisymm) to get total power
-		P0 = 2*np.pi * integ.simps(R*q, swall)
+		# Need to split the intervals if swall is discontinuous
+		P0 = []
+		gaps = np.diff(swall)
+		split_indices = np.where(gaps > ds)[0] + 1
+		segments = np.split(swall, split_indices)
+		for seg in segments:
+			mask = np.isin(swall,seg)
+			R_seg = R[mask]
+			s_seg = swall[mask]
+			q_seg = q[mask]
+			integral = 2*np.pi*integ.simps(R_seg*q_seg, s_seg)
+			P0.append(integral)
+		P0 = np.sum(P0)
 		print('P0 = ', P0)
 		#account for nonphysical power
 		if P0 < 0: P0 = -P0

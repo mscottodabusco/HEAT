@@ -267,6 +267,7 @@ class MHD:
         for idx,t in enumerate(self.timesteps):
             timeDir = self.shotPath + self.tsFmt.format(t) +'/'
             gfile = timeDir+self.gFiles[idx]
+            print('gfile  = ', gfile)
             self.ep[idx] = EP.equilParams(gfile)#, gType='heat')
         return
 
@@ -617,7 +618,7 @@ class MHD:
         return
 
     def getMultipleFieldPaths(self, dphi, gridfile, controlfilePath,
-                                controlfile, paraview_mask=False):
+                                controlfile, bbox=True, paraview_mask=False):
 
         args = []
         #args 0 is MAFOT structure binary call
@@ -629,7 +630,11 @@ class MHD:
         #args 3,4 are the points that we launch traces from
         args.append('-P')
         args.append(gridfile)
-        #args 5 is the MAFOT control file
+        #args 5 use simple boundary instead of g-file wall as limiter
+	#This must be used with MAFOT version 5.7 or newer for the Shadow Mask calculation
+        if bbox is True:
+            args.append('-b')
+	#args 6 is the MAFOT control file
         args.append(controlfile)
         #Copy the current environment (important when in appImage mode)
         current_env = os.environ.copy()
